@@ -1,0 +1,50 @@
+import type { Metadata } from "next";
+
+import { APP_NAME, APP_TAGLINE } from "@/config/constants";
+import { absoluteUrl, defaultOpenGraphImage } from "@/lib/seo/canonical";
+
+export const defaultMetadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  ),
+  applicationName: APP_NAME,
+  title: {
+    default: APP_NAME,
+    template: `%s · ${APP_NAME}`,
+  },
+  description: APP_TAGLINE,
+  keywords: ["rental", "marketplace", "peer-to-peer", "RentPe"],
+  authors: [{ name: APP_NAME }],
+  creator: APP_NAME,
+  openGraph: {
+    type: "website",
+    locale: "en_PK",
+    url: absoluteUrl("/"),
+    siteName: APP_NAME,
+    title: APP_NAME,
+    description: APP_TAGLINE,
+    images: [defaultOpenGraphImage()],
+  },
+  twitter: {
+    card: "summary",
+    title: APP_NAME,
+    description: APP_TAGLINE,
+    images: [absoluteUrl("/icons/icon-512.png")],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  alternates: {
+    canonical: absoluteUrl("/"),
+  },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: APP_NAME,
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};

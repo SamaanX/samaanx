@@ -1,0 +1,12 @@
+// This is your Prisma schema file.
+// Models will be added in later phases — Phase 0 is tooling only.
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

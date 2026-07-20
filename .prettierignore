@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+build
+public/sw.js
+public/workbox-*.js
+public/sw.js.map
+public/workbox-*.js.map
+coverage
+*.md
