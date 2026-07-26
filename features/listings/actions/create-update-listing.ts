@@ -5,20 +5,12 @@ import { revalidateTag } from "next/cache";
 import { after } from "next/server";
 
 import {
-  isAllowedListingImageMime,
-  LISTING_IMAGE_MAX,
-  LISTING_IMAGE_MAX_BYTES,
-  LISTING_IMAGE_MIN,
   LISTING_IMAGES_BUCKET,
   listingFormSchema,
+  type ListingImageMeta,
 } from "@/features/listings/schemas/listing";
 import { resolveDepositFields } from "@/features/listings/services/deposit";
 import { toListingActionError } from "@/features/listings/services/listing-errors";
-import {
-  buildListingImagePath,
-  extensionForListingMime,
-  getListingImagePublicUrl,
-} from "@/features/listings/services/listing-image-storage";
 import { toSellerListingDetailView } from "@/features/listings/services/listing-mappers";
 import { buildListingSlug } from "@/features/listings/services/slug";
 import type {
@@ -32,89 +24,49 @@ import { ActionTimeline } from "@/lib/perf/action-timeline";
 import { createClient } from "@/lib/supabase/server";
 
 function revalidateSellerListingPaths() {
-  // Public catalog only — seller UI uses client query cache (no page refresh).
   revalidateTag("home-catalog", "max");
   revalidateTag("categories", "max");
 }
 
 function scheduleSellerListingRevalidation(timeline: ActionTimeline) {
   after(() => {
-    const revalidateStart = performance.now();
     revalidateSellerListingPaths();
-    const revalidateMs = Math.round(performance.now() - revalidateStart);
-    if (revalidateMs > 100) {
-      logger.warn("listing.publish.slow_step", {
-        label: "Revalidate (after response)",
-        stepMs: revalidateMs,
-        exceeds300ms: revalidateMs > 300,
-      });
-    }
   });
   timeline.mark("Revalidate scheduled (after response)");
 }
 
 function parseListingPayload(raw: unknown) {
-  if (typeof raw !== "string") {
+  const json =
+    typeof raw === "string"
+      ? (() => {
+          try {
+            return JSON.parse(raw) as unknown;
+          } catch {
+            return null;
+          }
+        })()
+      : raw;
+
+  if (json == null) {
+    return { ok: false as const, message: "Invalid listing payload." };
+  }
+
+  const parsed = listingFormSchema.safeParse(json);
+  if (!parsed.success) {
     return {
       ok: false as const,
-      message: "Invalid listing payload.",
+      message: parsed.error.issues[0]?.message ?? "Invalid listing data.",
     };
   }
 
-  try {
-    const json: unknown = JSON.parse(raw);
-    const parsed = listingFormSchema.safeParse(json);
-    if (!parsed.success) {
-      return {
-        ok: false as const,
-        message: parsed.error.issues[0]?.message ?? "Invalid listing data.",
-      };
-    }
-    return { ok: true as const, data: parsed.data };
-  } catch {
-    return { ok: false as const, message: "Invalid listing payload." };
-  }
+  return { ok: true as const, data: parsed.data };
 }
-
-function collectImageFiles(formData: FormData): File[] {
-  return formData
-    .getAll("images")
-    .filter((value): value is File => value instanceof File && value.size > 0);
-}
-
-function validateImageFiles(files: File[]): string | null {
-  if (files.length < LISTING_IMAGE_MIN) {
-    return `Add at least ${LISTING_IMAGE_MIN} photo.`;
-  }
-  if (files.length > LISTING_IMAGE_MAX) {
-    return `You can upload up to ${LISTING_IMAGE_MAX} photos.`;
-  }
-
-  for (const file of files) {
-    if (!isAllowedListingImageMime(file.type)) {
-      return "Photos must be JPG, PNG, or WebP.";
-    }
-    if (file.size > LISTING_IMAGE_MAX_BYTES) {
-      return "Each photo must be 5 MB or smaller.";
-    }
-  }
-
-  return null;
-}
-
-type UploadedListingImage = {
-  storagePath: string;
-  url: string;
-  sortOrder: number;
-  byteSize: number;
-};
 
 async function reassignKeptImageSortOrders(imageIds: string[]): Promise<void> {
   if (imageIds.length === 0) {
     return;
   }
 
-  // Two parallel batches avoid sort_order unique collisions without 2N sequential round-trips.
   await prisma.$transaction(async (tx) => {
     await Promise.all(
       imageIds.map((id, index) =>
@@ -135,79 +87,13 @@ async function reassignKeptImageSortOrders(imageIds: string[]): Promise<void> {
   });
 }
 
-async function uploadListingImages(params: {
-  userId: string;
-  listingId: string;
-  files: File[];
-  startSortOrder?: number;
-}): Promise<
-  | { ok: true; images: UploadedListingImage[]; uploadMs: number }
-  | { ok: false; message: string }
-> {
-  const uploadStart = performance.now();
-  const supabase = await createClient();
-  const start = params.startSortOrder ?? 0;
-  const stamp = Date.now();
-  const uploadedPaths: string[] = [];
-
-  try {
-    const images = await Promise.all(
-      params.files.map(async (file, index) => {
-        const ext = extensionForListingMime(file.type);
-        const objectPath = buildListingImagePath(
-          params.userId,
-          params.listingId,
-          `${start + index}-${stamp}.${ext}`,
-        );
-        const bytes = new Uint8Array(await file.arrayBuffer());
-
-        const { error } = await supabase.storage
-          .from(LISTING_IMAGES_BUCKET)
-          .upload(objectPath, bytes, {
-            contentType: file.type,
-            upsert: false,
-            cacheControl: "3600",
-          });
-
-        if (error) {
-          throw new Error(error.message);
-        }
-
-        uploadedPaths.push(objectPath);
-
-        return {
-          storagePath: objectPath,
-          url: getListingImagePublicUrl(objectPath),
-          sortOrder: start + index,
-          byteSize: file.size,
-        };
-      }),
-    );
-
-    return {
-      ok: true,
-      images,
-      uploadMs: Math.round(performance.now() - uploadStart),
-    };
-  } catch (error) {
-    logger.error("Listing image upload failed", {
-      message: error instanceof Error ? error.message : "unknown_error",
-    });
-
-    if (uploadedPaths.length > 0) {
-      await supabase.storage.from(LISTING_IMAGES_BUCKET).remove(uploadedPaths);
-    }
-
-    return {
-      ok: false,
-      message: "Could not upload photos. Please try again.",
-    };
-  }
-}
-
-export async function createListingAction(
-  formData: FormData,
-): Promise<ListingActionResult<{ id: string }>> {
+/**
+ * Creates the listing row (no photos). Client uploads photos directly to Supabase,
+ * then calls registerListingImagesAction.
+ */
+export async function beginCreateListingAction(
+  payloadInput: unknown,
+): Promise<ListingActionResult<{ id: string; userId: string }>> {
   const timeline = new ActionTimeline();
 
   try {
@@ -216,29 +102,13 @@ export async function createListingAction(
     const { user, profile } = await requireUser();
     timeline.mark("Auth + profile");
 
-    const payload = parseListingPayload(formData.get("payload"));
+    const payload = parseListingPayload(payloadInput);
     timeline.mark("Validate payload");
     if (!payload.ok) {
-      timeline.done("createListingAction");
+      timeline.done("beginCreateListingAction");
       return {
         ok: false,
         error: { code: "VALIDATION", message: payload.message },
-      };
-    }
-
-    const files = collectImageFiles(formData);
-    timeline.mark("Collect image files", {
-      count: files.length,
-      totalBytes: files.reduce((sum, file) => sum + file.size, 0),
-    });
-
-    const imageError = validateImageFiles(files);
-    timeline.mark("Validate image files");
-    if (imageError) {
-      timeline.done("createListingAction");
-      return {
-        ok: false,
-        error: { code: "VALIDATION", message: imageError },
       };
     }
 
@@ -247,7 +117,7 @@ export async function createListingAction(
     });
     timeline.mark("Category lookup");
     if (!category) {
-      timeline.done("createListingAction");
+      timeline.done("beginCreateListingAction");
       return {
         ok: false,
         error: { code: "VALIDATION", message: "Choose a valid category." },
@@ -258,7 +128,7 @@ export async function createListingAction(
       payload.data.status === "PAUSED" ||
       payload.data.status === "ARCHIVED"
     ) {
-      timeline.done("createListingAction");
+      timeline.done("beginCreateListingAction");
       return {
         ok: false,
         error: {
@@ -271,7 +141,6 @@ export async function createListingAction(
     const deposit = resolveDepositFields(payload.data);
     const slug = buildListingSlug(payload.data.title);
     const publishedAt = payload.data.status === "ACTIVE" ? new Date() : null;
-    timeline.mark("Resolve deposit + slug");
 
     const listing = await prisma.listing.create({
       data: {
@@ -311,33 +180,73 @@ export async function createListingAction(
       },
     });
     timeline.mark("Listing insert + availability");
+    timeline.done("beginCreateListingAction");
 
-    const upload = await uploadListingImages({
-      userId: user.id,
-      listingId: listing.id,
-      files,
+    return { ok: true, data: { id: listing.id, userId: user.id } };
+  } catch (error) {
+    timeline.mark("Error");
+    timeline.done("beginCreateListingAction");
+    logger.error("beginCreateListingAction failed", {
+      message: error instanceof Error ? error.message : "unknown_error",
     });
-    timeline.mark("Image storage uploads (parallel)", {
-      count: files.length,
-      uploadMs: upload.ok ? upload.uploadMs : undefined,
-    });
+    return { ok: false, error: toListingActionError(error) };
+  }
+}
 
-    if (!upload.ok) {
-      await prisma.listing.update({
-        where: { id: listing.id },
-        data: { deletedAt: new Date(), status: "ARCHIVED" },
-      });
-      timeline.mark("Rollback listing after failed upload");
-      timeline.done("createListingAction");
+export async function rollbackListingDraftAction(
+  listingId: string,
+): Promise<void> {
+  try {
+    const { profile } = await requireUser();
+    await prisma.listing.updateMany({
+      where: { id: listingId, sellerId: profile.id, deletedAt: null },
+      data: { deletedAt: new Date(), status: "ARCHIVED" },
+    });
+  } catch (error) {
+    logger.error("rollbackListingDraftAction failed", {
+      listingId,
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
+}
+
+export async function registerListingImagesAction(
+  listingId: string,
+  images: ListingImageMeta[],
+): Promise<ListingActionResult<{ id: string }>> {
+  const timeline = new ActionTimeline();
+
+  try {
+    timeline.mark("Action start");
+
+    const { profile } = await requireUser();
+    timeline.mark("Auth + profile");
+
+    if (images.length < 1) {
+      timeline.done("registerListingImagesAction");
       return {
         ok: false,
-        error: { code: "INTERNAL", message: upload.message },
+        error: { code: "VALIDATION", message: "Add at least one photo." },
+      };
+    }
+
+    const listing = await prisma.listing.findFirst({
+      where: { id: listingId, sellerId: profile.id, deletedAt: null },
+      select: { id: true },
+    });
+    timeline.mark("Listing ownership check");
+
+    if (!listing) {
+      timeline.done("registerListingImagesAction");
+      return {
+        ok: false,
+        error: { code: "NOT_FOUND", message: "Listing not found." },
       };
     }
 
     await prisma.listingImage.createMany({
-      data: upload.images.map((image) => ({
-        listingId: listing.id,
+      data: images.map((image) => ({
+        listingId,
         storagePath: image.storagePath,
         url: image.url,
         sortOrder: image.sortOrder,
@@ -347,28 +256,72 @@ export async function createListingAction(
     timeline.mark("Image database writes");
 
     scheduleSellerListingRevalidation(timeline);
-    timeline.done("createListingAction");
-    return { ok: true, data: { id: listing.id } };
+    timeline.done("registerListingImagesAction");
+    return { ok: true, data: { id: listingId } };
   } catch (error) {
     timeline.mark("Error");
-    timeline.done("createListingAction");
-    logger.error("createListingAction failed", {
+    timeline.done("registerListingImagesAction");
+    logger.error("registerListingImagesAction failed", {
       message: error instanceof Error ? error.message : "unknown_error",
     });
     return { ok: false, error: toListingActionError(error) };
   }
 }
 
+/** @deprecated Use beginCreateListingAction + client upload + registerListingImagesAction */
+export async function createListingAction(
+  formData: FormData,
+): Promise<ListingActionResult<{ id: string }>> {
+  const payload = formData.get("payload");
+  const begin = await beginCreateListingAction(payload);
+  if (!begin.ok) {
+    return begin;
+  }
+
+  return {
+    ok: false,
+    error: {
+      code: "VALIDATION",
+      message:
+        "Use the updated listing form upload flow. Refresh the page and try again.",
+    },
+  };
+}
+
+type UpdateListingInput = {
+  payload: unknown;
+  keepImageIds: string[];
+  newImages: ListingImageMeta[];
+};
+
 export async function updateListingAction(
   listingId: string,
-  formData: FormData,
+  input: UpdateListingInput | FormData,
 ): Promise<ListingActionResult<SellerListingDetailView>> {
   const timeline = new ActionTimeline();
 
   try {
     timeline.mark("Action start");
 
-    const { user, profile } = await requireUser();
+    const normalized: UpdateListingInput =
+      input instanceof FormData
+        ? {
+            payload: input.get("payload"),
+            keepImageIds: (() => {
+              const raw = input.get("keepImageIds");
+              if (typeof raw !== "string" || raw.length === 0) return [];
+              try {
+                const parsed: unknown = JSON.parse(raw);
+                return Array.isArray(parsed) ? (parsed as string[]) : [];
+              } catch {
+                return [];
+              }
+            })(),
+            newImages: [],
+          }
+        : input;
+
+    const { profile } = await requireUser();
     timeline.mark("Auth + profile");
 
     const existing = await prisma.listing.findFirst({
@@ -385,7 +338,7 @@ export async function updateListingAction(
       };
     }
 
-    const payload = parseListingPayload(formData.get("payload"));
+    const payload = parseListingPayload(normalized.payload);
     timeline.mark("Validate payload");
     if (!payload.ok) {
       timeline.done("updateListingAction");
@@ -395,85 +348,25 @@ export async function updateListingAction(
       };
     }
 
-    const keepRaw = formData.get("keepImageIds");
-    let keepImageIds: string[] = [];
-    if (typeof keepRaw === "string" && keepRaw.length > 0) {
-      try {
-        const parsed: unknown = JSON.parse(keepRaw);
-        if (
-          Array.isArray(parsed) &&
-          parsed.every((item) => typeof item === "string")
-        ) {
-          keepImageIds = parsed;
-        } else {
-          timeline.done("updateListingAction");
-          return {
-            ok: false,
-            error: { code: "VALIDATION", message: "Invalid image order." },
-          };
-        }
-      } catch {
-        timeline.done("updateListingAction");
-        return {
-          ok: false,
-          error: { code: "VALIDATION", message: "Invalid image order." },
-        };
-      }
-    }
-    timeline.mark("Parse keepImageIds");
-
-    const newFiles = collectImageFiles(formData);
-    timeline.mark("Collect image files", {
-      count: newFiles.length,
-      totalBytes: newFiles.reduce((sum, file) => sum + file.size, 0),
+    const keepImageIds = normalized.keepImageIds;
+    const newImages = normalized.newImages;
+    timeline.mark("Parse images metadata", {
+      kept: keepImageIds.length,
+      newCount: newImages.length,
     });
-
-    for (const file of newFiles) {
-      if (!isAllowedListingImageMime(file.type)) {
-        timeline.done("updateListingAction");
-        return {
-          ok: false,
-          error: {
-            code: "VALIDATION",
-            message: "Photos must be JPG, PNG, or WebP.",
-          },
-        };
-      }
-      if (file.size > LISTING_IMAGE_MAX_BYTES) {
-        timeline.done("updateListingAction");
-        return {
-          ok: false,
-          error: {
-            code: "VALIDATION",
-            message: "Each photo must be 5 MB or smaller.",
-          },
-        };
-      }
-    }
-    timeline.mark("Validate new image files");
 
     const keptImages = existing.images
       .filter((image) => keepImageIds.includes(image.id))
       .sort((a, b) => keepImageIds.indexOf(a.id) - keepImageIds.indexOf(b.id));
 
-    const totalImages = keptImages.length + newFiles.length;
-    if (totalImages < LISTING_IMAGE_MIN) {
+    const totalImages = keptImages.length + newImages.length;
+    if (totalImages < 1) {
       timeline.done("updateListingAction");
       return {
         ok: false,
         error: {
           code: "VALIDATION",
-          message: `Keep at least ${LISTING_IMAGE_MIN} photo.`,
-        },
-      };
-    }
-    if (totalImages > LISTING_IMAGE_MAX) {
-      timeline.done("updateListingAction");
-      return {
-        ok: false,
-        error: {
-          code: "VALIDATION",
-          message: `You can have up to ${LISTING_IMAGE_MAX} photos.`,
+          message: "Keep at least one photo.",
         },
       };
     }
@@ -515,35 +408,11 @@ export async function updateListingAction(
     }
 
     await reassignKeptImageSortOrders(keptImages.map((image) => image.id));
-    timeline.mark("Reorder kept images (parallel batches)", {
-      count: keptImages.length,
-    });
+    timeline.mark("Reorder kept images", { count: keptImages.length });
 
-    let uploadedCount = 0;
-
-    if (newFiles.length > 0) {
-      const upload = await uploadListingImages({
-        userId: user.id,
-        listingId,
-        files: newFiles,
-        startSortOrder: keptImages.length,
-      });
-      timeline.mark("Image storage uploads (parallel)", {
-        count: newFiles.length,
-        uploadMs: upload.ok ? upload.uploadMs : undefined,
-      });
-
-      if (!upload.ok) {
-        timeline.done("updateListingAction");
-        return {
-          ok: false,
-          error: { code: "INTERNAL", message: upload.message },
-        };
-      }
-
-      uploadedCount = upload.images.length;
+    if (newImages.length > 0) {
       await prisma.listingImage.createMany({
-        data: upload.images.map((image) => ({
+        data: newImages.map((image) => ({
           listingId,
           storagePath: image.storagePath,
           url: image.url,
@@ -551,7 +420,7 @@ export async function updateListingAction(
           byteSize: image.byteSize,
         })),
       });
-      timeline.mark("Image database writes");
+      timeline.mark("New image database writes");
     }
 
     const nextStatus = payload.data.status;
@@ -599,12 +468,6 @@ export async function updateListingAction(
       }),
     ]);
     timeline.mark("Listing update transaction");
-
-    logger.info("Listing updated", {
-      listingId,
-      kept: keptImages.length,
-      uploaded: uploadedCount,
-    });
 
     const updated = await prisma.listing.findFirstOrThrow({
       where: { id: listingId },

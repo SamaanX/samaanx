@@ -10,7 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DEFAULT_COUNTRY_CODE } from "@/config/constants";
 import {
-  createListingAction,
+  beginCreateListingAction,
+  registerListingImagesAction,
+  rollbackListingDraftAction,
   updateListingAction,
 } from "@/features/listings/actions";
 import {
@@ -30,6 +32,7 @@ import {
   type ListingFormValues,
   TITLE_MAX,
 } from "@/features/listings/schemas/listing";
+import { uploadListingImagesFromClient } from "@/features/listings/services/upload-listing-images-client";
 import type {
   CategoryOption,
   SellerListingDetailView,
@@ -202,72 +205,134 @@ export function ListingForm({
       return;
     }
 
+    const newFiles = draftImagesToFiles(images);
     setUploading(true);
     setImages((current) =>
-      current.map((image, index) => ({
+      current.map((image) => ({
         ...image,
-        progress: image.kind === "new" ? Math.max(8, index * 5) : 100,
+        progress: image.kind === "new" ? 8 : 100,
       })),
     );
 
-    const formData = new FormData();
-    formData.set("payload", JSON.stringify(values));
+    try {
+      if (mode === "create") {
+        const begin = await beginCreateListingAction(values);
+        if (!begin.ok) {
+          setFormError(begin.error.message);
+          return;
+        }
 
-    if (mode === "edit" && listing) {
-      formData.set(
-        "keepImageIds",
-        JSON.stringify(draftImagesToKeepIds(images)),
-      );
-    }
+        let uploaded;
+        try {
+          uploaded = await uploadListingImagesFromClient({
+            listingId: begin.data.id,
+            files: newFiles,
+            onFileComplete: (completed, total) => {
+              const ratio = Math.round((completed / total) * 100);
+              setImages((current) => {
+                let newIndex = 0;
+                return current.map((image) => {
+                  if (image.kind !== "new") {
+                    return image;
+                  }
+                  newIndex += 1;
+                  return {
+                    ...image,
+                    progress: newIndex <= completed ? ratio : image.progress,
+                  };
+                });
+              });
+            },
+          });
+        } catch (uploadError) {
+          await rollbackListingDraftAction(begin.data.id);
+          setFormError(
+            uploadError instanceof Error
+              ? uploadError.message
+              : "Could not upload photos. Please try again.",
+          );
+          return;
+        }
 
-    const newFiles = draftImagesToFiles(images);
-    for (const file of newFiles) {
-      formData.append("images", file);
-    }
+        const registered = await registerListingImagesAction(
+          begin.data.id,
+          uploaded,
+        );
 
-    // Animate progress while the server action uploads.
-    const progressTimer = window.setInterval(() => {
+        if (!registered.ok) {
+          await rollbackListingDraftAction(begin.data.id);
+          setFormError(registered.error.message);
+          return;
+        }
+
+        setImages((current) =>
+          current.map((image) => ({ ...image, progress: 100 })),
+        );
+        trackEvent("create_listing", { listing_id: registered.data.id });
+        router.replace(`/seller/listings/${registered.data.id}/edit`);
+        return;
+      }
+
+      if (!listing) {
+        setFormError("Listing not found.");
+        return;
+      }
+
+      const keepImageIds = draftImagesToKeepIds(images);
+      let newImages: Awaited<ReturnType<typeof uploadListingImagesFromClient>> =
+        [];
+
+      if (newFiles.length > 0) {
+        try {
+          newImages = await uploadListingImagesFromClient({
+            listingId: listing.id,
+            files: newFiles,
+            startSortOrder: keepImageIds.length,
+            onFileComplete: (completed, total) => {
+              const ratio = Math.round((completed / total) * 100);
+              setImages((current) => {
+                let newIndex = 0;
+                return current.map((image) => {
+                  if (image.kind !== "new") {
+                    return image;
+                  }
+                  newIndex += 1;
+                  return {
+                    ...image,
+                    progress: newIndex <= completed ? ratio : image.progress,
+                  };
+                });
+              });
+            },
+          });
+        } catch (uploadError) {
+          setFormError(
+            uploadError instanceof Error
+              ? uploadError.message
+              : "Could not upload photos. Please try again.",
+          );
+          return;
+        }
+      }
+
+      const result = await updateListingAction(listing.id, {
+        payload: values,
+        keepImageIds,
+        newImages,
+      });
+
+      if (!result.ok) {
+        setFormError(result.error.message);
+        return;
+      }
+
       setImages((current) =>
-        current.map((image) =>
-          image.kind === "new"
-            ? {
-                ...image,
-                progress: Math.min(image.progress + 12, 90),
-              }
-            : image,
-        ),
+        current.map((image) => ({ ...image, progress: 100 })),
       );
-    }, 280);
-
-    const result =
-      mode === "create"
-        ? await createListingAction(formData)
-        : await updateListingAction(listing!.id, formData);
-
-    window.clearInterval(progressTimer);
-    setUploading(false);
-
-    if (!result.ok) {
-      setImages((current) =>
-        current.map((image) =>
-          image.kind === "new" ? { ...image, progress: 0 } : image,
-        ),
-      );
-      setFormError(result.error.message);
-      return;
+      setSuccess("Listing updated.");
+    } finally {
+      setUploading(false);
     }
-
-    setImages((current) =>
-      current.map((image) => ({ ...image, progress: 100 })),
-    );
-
-    if (mode === "create" && result.ok) {
-      trackEvent("create_listing", { listing_id: result.data.id });
-      router.replace(`/seller/listings/${result.data.id}/edit`);
-      return;
-    }
-
-    setSuccess("Listing updated.");
   }
 
   const createStatusOptions = [
