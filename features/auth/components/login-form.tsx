@@ -26,6 +26,7 @@ import { trackEvent } from "@/lib/analytics/events";
 export function LoginForm() {
   const searchParams = useSearchParams();
   const callbackError = searchParams.get("error");
+  const nextPath = searchParams.get("next");
 
   const [formError, setFormError] = React.useState<string | null>(
     callbackError === "auth_callback"
@@ -63,8 +64,10 @@ export function LoginForm() {
     }
 
     trackEvent("login");
+    const redirectTo =
+      nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/";
     // Full navigation so marketplace layout re-reads the new auth cookies.
-    window.location.assign("/");
+    window.location.assign(redirectTo);
   }
 
   return (
