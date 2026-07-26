@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidateTag } from "next/cache";
+import { after } from "next/server";
 
 import { LISTING_IMAGES_BUCKET } from "@/features/listings/schemas/listing";
 import { toListingActionError } from "@/features/listings/services/listing-errors";
@@ -8,12 +9,20 @@ import type { ListingActionResult } from "@/features/listings/types/listing";
 import { requireUser } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
+import { ActionTimeline } from "@/lib/perf/action-timeline";
 import { createClient } from "@/lib/supabase/server";
 
 function revalidateSellerPaths(_listingId: string) {
   // Public catalog cache only — seller list updates via client invalidate.
   revalidateTag("home-catalog", "max");
   revalidateTag("categories", "max");
+}
+
+function scheduleSellerPathsRevalidation(timeline: ActionTimeline) {
+  after(() => {
+    revalidateSellerPaths("");
+  });
+  timeline.mark("Revalidate scheduled (after response)");
 }
 
 export async function deleteListingAction(
@@ -52,7 +61,9 @@ export async function deleteListingAction(
       }),
     ]);
 
-    revalidateSellerPaths(listingId);
+    after(() => {
+      revalidateSellerPaths(listingId);
+    });
     return { ok: true, data: { success: true } };
   } catch (error) {
     logger.error("deleteListingAction failed", {
@@ -65,14 +76,22 @@ export async function deleteListingAction(
 export async function publishListingAction(
   listingId: string,
 ): Promise<ListingActionResult<{ success: true }>> {
+  const timeline = new ActionTimeline();
+
   try {
+    timeline.mark("Action start");
+
     const { profile } = await requireUser();
+    timeline.mark("Auth + profile");
+
     const listing = await prisma.listing.findFirst({
       where: { id: listingId, sellerId: profile.id, deletedAt: null },
       include: { images: true },
     });
+    timeline.mark("Listing lookup");
 
     if (!listing) {
+      timeline.done("publishListingAction");
       return {
         ok: false,
         error: { code: "NOT_FOUND", message: "Listing not found." },
@@ -80,6 +99,7 @@ export async function publishListingAction(
     }
 
     if (listing.images.length < 1) {
+      timeline.done("publishListingAction");
       return {
         ok: false,
         error: {
@@ -90,6 +110,7 @@ export async function publishListingAction(
     }
 
     if (listing.status === "ARCHIVED") {
+      timeline.done("publishListingAction");
       return {
         ok: false,
         error: {
@@ -106,10 +127,14 @@ export async function publishListingAction(
         publishedAt: listing.publishedAt ?? new Date(),
       },
     });
+    timeline.mark("Listing status update");
 
-    revalidateSellerPaths(listingId);
+    scheduleSellerPathsRevalidation(timeline);
+    timeline.done("publishListingAction");
     return { ok: true, data: { success: true } };
   } catch (error) {
+    timeline.mark("Error");
+    timeline.done("publishListingAction");
     logger.error("publishListingAction failed", {
       message: error instanceof Error ? error.message : "unknown_error",
     });
@@ -148,7 +173,9 @@ export async function pauseListingAction(
       data: { status: "PAUSED" },
     });
 
-    revalidateSellerPaths(listingId);
+    after(() => {
+      revalidateSellerPaths(listingId);
+    });
     return { ok: true, data: { success: true } };
   } catch (error) {
     logger.error("pauseListingAction failed", {
@@ -179,7 +206,9 @@ export async function archiveListingAction(
       data: { status: "ARCHIVED" },
     });
 
-    revalidateSellerPaths(listingId);
+    after(() => {
+      revalidateSellerPaths(listingId);
+    });
     return { ok: true, data: { success: true } };
   } catch (error) {
     logger.error("archiveListingAction failed", {
