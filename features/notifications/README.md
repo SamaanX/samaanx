@@ -1,7 +1,9 @@
 # Feature: notifications
 
-Scaffold only (Phase 0).
+In-app notification inbox for existing `Notification` rows.
 
-Implement business logic in later phases per Architecture Plan v1.2.
+- Queries: list + unread count (Prisma, server-only)
+- Actions: mark one / mark all read (revalidates header layout)
+- UI: `/notifications`, header bell dropdown + badge, mark all as read
 
-Internal layout: components, actions, api, schemas, services, queries, types, hooks.
+Writes still happen from rental / verification flows via `buildInAppNotificationData`.

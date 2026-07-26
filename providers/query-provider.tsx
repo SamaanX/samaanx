@@ -7,8 +7,10 @@ function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 60 * 1000,
+        staleTime: 30_000,
+        gcTime: 5 * 60_000,
         refetchOnWindowFocus: false,
+        retry: 1,
       },
     },
   });
@@ -20,15 +22,12 @@ function getQueryClient() {
   if (typeof window === "undefined") {
     return makeQueryClient();
   }
-
   browserQueryClient ??= makeQueryClient();
   return browserQueryClient;
 }
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
-  const queryClient = getQueryClient();
+  const [client] = React.useState(getQueryClient);
 
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  );
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

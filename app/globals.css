@@ -5,12 +5,45 @@
 @custom-variant dark (&:is(.dark *));
 
 /* -------------------------------------------------------------------------- */
-/* RentPe design tokens — Design Language foundation (Phase 0)                */
-/* Mobile-first · Premium · Minimal · Rounded · Large touch targets           */
+/* SamaanX design system — official logo colors                               */
+/* Primary blue #1048A8 · Secondary green #00B880                             */
+/* Dark: --brand-accent remaps text/icon brand-blue utilities → emerald     */
 /* -------------------------------------------------------------------------- */
 
 :root {
-  /* Typography scale */
+  /* Logo-exact brand primitives */
+  --brand-blue: #1048a8;
+  --brand-green: #00b880;
+  --brand-white: #ffffff;
+  --brand-black: #000000;
+
+  /* Soft mixes from logo colors only (no new hues) */
+  --brand-blue-deep: color-mix(in oklab, var(--brand-blue) 88%, black);
+  --brand-blue-soft: color-mix(in oklab, var(--brand-blue) 10%, #f7f9fc);
+  --brand-green-soft: color-mix(in oklab, var(--brand-green) 12%, #f7f9fc);
+  --brand-gradient: linear-gradient(
+    135deg,
+    var(--brand-blue) 0%,
+    color-mix(in oklab, var(--brand-blue) 35%, var(--brand-green)) 48%,
+    var(--brand-green) 100%
+  );
+
+  /*
+   * UI accent used by text-brand-blue / bg-brand-blue-soft utilities.
+   * Light = blue; dark = emerald so icons/links match brand green.
+   */
+  --brand-accent: var(--brand-blue);
+  --brand-accent-soft: var(--brand-blue-soft);
+
+  /* Aliases for existing utility classnames */
+  --brand-cyan: var(--brand-blue);
+  --brand-cyan-deep: var(--brand-blue-deep);
+  --brand-cyan-soft: var(--brand-blue-soft);
+  --brand-teal: var(--brand-green);
+  --brand-teal-bright: var(--brand-green);
+  --brand-teal-soft: var(--brand-green-soft);
+
+  /* Typography */
   --rp-text-xs: 0.75rem;
   --rp-text-sm: 0.875rem;
   --rp-text-base: 1rem;
@@ -25,7 +58,7 @@
   --rp-tracking-tight: -0.02em;
   --rp-tracking-normal: 0;
 
-  /* Spacing scale (4px base) */
+  /* Spacing */
   --rp-space-0: 0;
   --rp-space-1: 0.25rem;
   --rp-space-2: 0.5rem;
@@ -40,7 +73,7 @@
   --rp-space-20: 5rem;
   --rp-space-24: 6rem;
 
-  /* Radius scale — rounded UI */
+  /* Radius */
   --rp-radius-sm: 0.5rem;
   --rp-radius-md: 0.75rem;
   --rp-radius-lg: 1rem;
@@ -48,94 +81,103 @@
   --rp-radius-2xl: 1.5rem;
   --rp-radius-full: 9999px;
 
-  /* Shadow tokens — minimal elevation */
-  --rp-shadow-xs: 0 1px 2px oklch(0 0 0 / 4%);
-  --rp-shadow-sm: 0 1px 3px oklch(0 0 0 / 6%), 0 1px 2px oklch(0 0 0 / 4%);
-  --rp-shadow-md: 0 4px 12px oklch(0 0 0 / 8%);
-  --rp-shadow-lg: 0 12px 32px oklch(0 0 0 / 10%);
+  /* Soft shadows */
+  --rp-shadow-xs: 0 1px 2px rgb(16 72 168 / 6%);
+  --rp-shadow-sm: 0 1px 3px rgb(16 72 168 / 7%), 0 1px 2px rgb(0 0 0 / 4%);
+  --rp-shadow-md: 0 4px 14px rgb(16 72 168 / 10%);
+  --rp-shadow-lg: 0 12px 32px rgb(16 72 168 / 12%);
 
-  /* Animation tokens — smooth, purposeful */
+  /* Motion */
   --rp-ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --rp-ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
   --rp-duration-fast: 150ms;
   --rp-duration-normal: 250ms;
   --rp-duration-slow: 400ms;
-
-  /* Touch target */
   --rp-touch-min: 2.75rem;
 
-  /* Semantic color tokens (light) */
-  --background: oklch(0.99 0.002 90);
-  --foreground: oklch(0.18 0.01 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.01 260);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.01 260);
-  --primary: oklch(0.22 0.02 260);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.005 90);
-  --secondary-foreground: oklch(0.22 0.02 260);
-  --muted: oklch(0.96 0.005 90);
-  --muted-foreground: oklch(0.5 0.015 260);
-  --accent: oklch(0.96 0.01 90);
-  --accent-foreground: oklch(0.22 0.02 260);
-  --destructive: oklch(0.55 0.2 25);
-  --border: oklch(0.9 0.005 90);
-  --input: oklch(0.9 0.005 90);
-  --ring: oklch(0.55 0.02 260);
-  --chart-1: oklch(0.7 0.05 90);
-  --chart-2: oklch(0.55 0.02 260);
-  --chart-3: oklch(0.45 0.02 260);
-  --chart-4: oklch(0.35 0.02 260);
-  --chart-5: oklch(0.28 0.02 260);
+  /* Light theme — soft premium surfaces (no pure white canvas) */
+  --background: #f4f6fa;
+  --foreground: #122033;
+  --card: #fbfcfe;
+  --card-foreground: #122033;
+  --popover: #fbfcfe;
+  --popover-foreground: #122033;
+  --primary: var(--brand-blue);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-blue-soft);
+  --secondary-foreground: var(--brand-blue-deep);
+  --muted: #ebf0f6;
+  --muted-foreground: #5a6b80;
+  --accent: var(--brand-green-soft);
+  --accent-foreground: color-mix(in oklab, var(--brand-green) 55%, black);
+  --destructive: #d64545;
+  --border: #d7e0ec;
+  --input: #cfd9e8;
+  --ring: var(--brand-blue);
+  --chart-1: var(--brand-blue);
+  --chart-2: var(--brand-green);
+  --chart-3: color-mix(in oklab, var(--brand-blue) 70%, white);
+  --chart-4: color-mix(in oklab, var(--brand-green) 70%, white);
+  --chart-5: #122033;
   --radius: var(--rp-radius-lg);
-  --sidebar: oklch(0.985 0.002 90);
-  --sidebar-foreground: oklch(0.18 0.01 260);
-  --sidebar-primary: oklch(0.22 0.02 260);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.96 0.005 90);
-  --sidebar-accent-foreground: oklch(0.22 0.02 260);
-  --sidebar-border: oklch(0.9 0.005 90);
-  --sidebar-ring: oklch(0.55 0.02 260);
+  --sidebar: #fbfcfe;
+  --sidebar-foreground: #122033;
+  --sidebar-primary: var(--brand-blue);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--brand-blue-soft);
+  --sidebar-accent-foreground: var(--brand-blue-deep);
+  --sidebar-border: #d7e0ec;
+  --sidebar-ring: var(--brand-green);
 }
 
 .dark {
-  --rp-shadow-xs: 0 1px 2px oklch(0 0 0 / 30%);
-  --rp-shadow-sm: 0 1px 3px oklch(0 0 0 / 40%);
-  --rp-shadow-md: 0 4px 12px oklch(0 0 0 / 45%);
-  --rp-shadow-lg: 0 12px 32px oklch(0 0 0 / 55%);
+  /* Soft washes only — brand blue/green hex stay identical */
+  --brand-blue-soft: color-mix(in oklab, var(--brand-blue) 22%, #0f1729);
+  --brand-green-soft: color-mix(in oklab, var(--brand-green) 18%, #0f1729);
+  --brand-cyan-soft: var(--brand-blue-soft);
+  --brand-teal-soft: var(--brand-green-soft);
 
-  --background: oklch(0.14 0.01 260);
-  --foreground: oklch(0.98 0.002 90);
-  --card: oklch(0.18 0.012 260);
-  --card-foreground: oklch(0.98 0.002 90);
-  --popover: oklch(0.18 0.012 260);
-  --popover-foreground: oklch(0.98 0.002 90);
-  --primary: oklch(0.95 0.005 90);
-  --primary-foreground: oklch(0.18 0.012 260);
-  --secondary: oklch(0.24 0.012 260);
-  --secondary-foreground: oklch(0.98 0.002 90);
-  --muted: oklch(0.24 0.012 260);
-  --muted-foreground: oklch(0.7 0.01 260);
-  --accent: oklch(0.24 0.012 260);
-  --accent-foreground: oklch(0.98 0.002 90);
-  --destructive: oklch(0.65 0.18 22);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.65 0.02 260);
-  --chart-1: oklch(0.75 0.04 90);
-  --chart-2: oklch(0.65 0.02 260);
-  --chart-3: oklch(0.55 0.02 260);
-  --chart-4: oklch(0.45 0.02 260);
-  --chart-5: oklch(0.35 0.02 260);
-  --sidebar: oklch(0.18 0.012 260);
-  --sidebar-foreground: oklch(0.98 0.002 90);
-  --sidebar-primary: oklch(0.95 0.005 90);
-  --sidebar-primary-foreground: oklch(0.18 0.012 260);
-  --sidebar-accent: oklch(0.24 0.012 260);
-  --sidebar-accent-foreground: oklch(0.98 0.002 90);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.65 0.02 260);
+  /* Remap accent utilities → emerald (text-brand-blue, icons, soft fills) */
+  --brand-accent: var(--brand-green);
+  --brand-accent-soft: var(--brand-green-soft);
+
+  --rp-shadow-xs: 0 1px 2px rgb(0 0 0 / 35%);
+  --rp-shadow-sm: 0 1px 3px rgb(0 0 0 / 40%);
+  --rp-shadow-md: 0 4px 14px rgb(0 0 0 / 45%);
+  --rp-shadow-lg: 0 12px 32px rgb(0 0 0 / 55%);
+
+  /* Deep navy / slate — not pure black */
+  --background: #0f1729;
+  --foreground: #eef2f7;
+  --card: #162033;
+  --card-foreground: #eef2f7;
+  --popover: #162033;
+  --popover-foreground: #eef2f7;
+  --primary: var(--brand-blue);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-green-soft);
+  --secondary-foreground: #9af0d0;
+  --muted: #1c2a40;
+  --muted-foreground: #9aa8bc;
+  --accent: var(--brand-green-soft);
+  --accent-foreground: #9af0d0;
+  --destructive: #f07171;
+  --border: rgb(255 255 255 / 10%);
+  --input: rgb(255 255 255 / 14%);
+  --ring: var(--brand-green);
+  --chart-1: var(--brand-blue);
+  --chart-2: var(--brand-green);
+  --chart-3: color-mix(in oklab, var(--brand-blue) 75%, white);
+  --chart-4: color-mix(in oklab, var(--brand-green) 75%, white);
+  --chart-5: #eef2f7;
+  --sidebar: #162033;
+  --sidebar-foreground: #eef2f7;
+  --sidebar-primary: var(--brand-blue);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--brand-green-soft);
+  --sidebar-accent-foreground: #9af0d0;
+  --sidebar-border: rgb(255 255 255 / 10%);
+  --sidebar-ring: var(--brand-green);
 }
 
 @theme inline {
@@ -144,6 +186,17 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+  --color-brand-blue: var(--brand-accent);
+  --color-brand-green: var(--brand-green);
+  --color-brand-blue-soft: var(--brand-accent-soft);
+  --color-brand-green-soft: var(--brand-green-soft);
+  /* Always logo blue (not remapped in dark) — Buyer mode switch pill */
+  --color-brand-identity: var(--brand-blue);
+  --color-brand-identity-soft: var(--brand-blue-soft);
+  --color-brand-cyan: var(--brand-accent);
+  --color-brand-teal: var(--brand-green);
+  --color-brand-cyan-soft: var(--brand-accent-soft);
+  --color-brand-teal-soft: var(--brand-green-soft);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -205,5 +258,103 @@
 
   html {
     @apply font-sans;
+  }
+
+  a:not([class]) {
+    color: var(--brand-blue);
+    text-underline-offset: 3px;
+  }
+
+  a:not([class]):hover {
+    color: var(--brand-green);
+  }
+
+  .dark a:not([class]) {
+    color: var(--brand-green);
+  }
+
+  .dark a:not([class]):hover {
+    color: color-mix(in oklab, var(--brand-green) 82%, white);
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--brand-green) 28%, white);
+    color: var(--foreground);
+  }
+}
+
+@layer utilities {
+  .bg-brand-gradient {
+    background-image: var(--brand-gradient);
+  }
+
+  .animate-bell-nudge {
+    animation: bell-nudge 2.4s ease-in-out infinite;
+    transform-origin: top center;
+  }
+
+  @keyframes bell-nudge {
+    0%,
+    82%,
+    100% {
+      transform: rotate(0deg);
+    }
+    86% {
+      transform: rotate(12deg);
+    }
+    90% {
+      transform: rotate(-10deg);
+    }
+    94% {
+      transform: rotate(8deg);
+    }
+    98% {
+      transform: rotate(-4deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-bell-nudge {
+      animation: none;
+    }
+  }
+
+  .text-brand-gradient {
+    background-image: var(--brand-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Soft lift for primary CTAs */
+  .btn-lift {
+    transition:
+      transform var(--rp-duration-fast) var(--rp-ease-standard),
+      box-shadow var(--rp-duration-fast) var(--rp-ease-standard);
+  }
+
+  .btn-lift:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: var(--rp-shadow-md);
+  }
+
+  .btn-lift:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  /* Never tint / blur / recolor the logo */
+  .brand-logo {
+    filter: none !important;
+    opacity: 1 !important;
+    mix-blend-mode: normal !important;
+    image-rendering: auto;
+  }
+
+  /* Soft plate keeps official colors crisp on dark navy surfaces */
+  .brand-logo-plate {
+    background-color: #ffffff;
+    border-radius: var(--rp-radius-md);
+    padding: 0.35rem 0.55rem;
+    box-shadow: var(--rp-shadow-xs);
   }
 }

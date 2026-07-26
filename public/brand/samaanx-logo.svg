@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" fill="none" role="img" aria-label="SamaanX">
+  <title>SamaanX</title>
+  <!-- Mark: interlocking exchange chevrons -->
+  <g transform="translate(8, 18)">
+    <path d="M52 4 L22 42 L52 80 L36 80 L6 42 L36 4 Z" fill="#00D1FF"/>
+    <path d="M32 4 L62 42 L32 80 L48 80 L78 42 L48 4 Z" fill="#00D1FF"/>
+    <path d="M42 28 L52 42 L42 56 L32 42 Z" fill="#000000"/>
+  </g>
+  <!-- Wordmark: Samaan (white) + X (cyan / white strokes) -->
+  <text x="110" y="78" fill="#FFFFFF" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="56" font-weight="700" letter-spacing="-1.5">Samaan</text>
+  <!-- Stylized X -->
+  <g transform="translate(348, 22)">
+    <path d="M8 8 L64 72" stroke="#00D1FF" stroke-width="14" stroke-linecap="round"/>
+    <path d="M64 8 L8 72" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"/>
+  </g>
+</svg>

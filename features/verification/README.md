@@ -1,7 +1,17 @@
-# Feature: verification
+# Verification feature (Phase 5C)
 
-Scaffold only (Phase 0).
+QR + PIN handover and return verification.
 
-Implement business logic in later phases per Architecture Plan v1.2.
+## Actions
 
-Internal layout: components, actions, api, schemas, services, queries, types, hooks.
+- `generateVerificationAction`
+- `regenerateVerificationAction`
+- `verifyQrAction`
+- `verifyPinAction`
+- `confirmStageAction`
+- `getVerificationStatusAction`
+
+## Routes
+
+- `/rentals/[id]/handover`
+- `/rentals/[id]/return`

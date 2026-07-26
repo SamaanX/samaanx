@@ -1,0 +1,791 @@
+"use client";
+
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import * as React from "react";
+
+import {
+  getChatInboxAction,
+  getChatThreadAction,
+  getChatUnreadTotalAction,
+  hideChatMessageAction,
+  listChatMessagesAction,
+  markChatMessagesDeliveredAction,
+  markChatMessagesReadAction,
+  sendChatAttachmentAction,
+  sendChatTextMessageAction,
+  touchLastSeenAction,
+} from "@/features/chat/actions/chat-actions";
+import {
+  bumpChatUnreadTotal,
+  patchAppendMessage,
+  patchInboxPreview,
+  patchIncomingMessageTimestamps,
+  patchMessageReceipts,
+  patchReplaceOptimistic,
+  syncChatUnreadTotal,
+} from "@/features/chat/lib/chat-cache";
+import { showChatMessageToast } from "@/features/chat/services/chat-toast";
+import { previewFromMessage } from "@/features/chat/services/mappers";
+import type {
+  ChatConversationListItem,
+  ChatMessagesPage,
+  ChatMessageView,
+  ChatThreadHeader,
+} from "@/features/chat/types/chat";
+import { queryKeys } from "@/lib/query-keys";
+import { createClient } from "@/lib/supabase/client";
+
+type ReceiptPayload = {
+  type: "delivered" | "seen";
+  conversationId: string;
+  messageIds: string[];
+  at: string;
+  byUserId: string;
+};
+
+type MessagePayload = {
+  message: ChatMessageView;
+  senderName?: string;
+};
+
+async function sendBroadcast(
+  channel: RealtimeChannel | null,
+  event: "message" | "receipt",
+  payload: MessagePayload | ReceiptPayload,
+) {
+  if (!channel) return false;
+  for (let i = 0; i < 4; i += 1) {
+    const status = await channel.send({
+      type: "broadcast",
+      event,
+      payload,
+    });
+    if (status === "ok") return true;
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  return false;
+}
+
+/** Join a user channel briefly to push an event (delivery/seen fanout). */
+async function publishToUserChannel(
+  userId: string,
+  event: "message" | "receipt",
+  payload: MessagePayload | ReceiptPayload,
+) {
+  const supabase = createClient();
+  const channel = supabase.channel(`chat-user:${userId}`);
+  await new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      void supabase.removeChannel(channel);
+      resolve();
+    };
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await sendBroadcast(channel, event, payload);
+        finish();
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        finish();
+      }
+    });
+    window.setTimeout(finish, 2500);
+  });
+}
+
+function toLiveMessageView(
+  message: ChatMessageView,
+  viewerId: string,
+): ChatMessageView {
+  const isMine = message.senderId === viewerId;
+  return {
+    ...message,
+    isMine,
+    status: isMine
+      ? message.readAt
+        ? "seen"
+        : message.deliveredAt
+          ? "delivered"
+          : "sent"
+      : "sent",
+    optimistic: false,
+  };
+}
+
+function applyIncomingMessage(
+  queryClient: ReturnType<typeof useQueryClient>,
+  viewerId: string,
+  message: ChatMessageView,
+) {
+  const view = toLiveMessageView(message, viewerId);
+  const conversationId = view.conversationId;
+  const hadInbox = Boolean(queryClient.getQueryData(queryKeys.chat.inbox()));
+
+  patchAppendMessage(queryClient, conversationId, view);
+  patchInboxPreview(queryClient, conversationId, view, {
+    clearUnread: view.isMine,
+    bumpUnread: !view.isMine,
+  });
+
+  // Inbox may not be loaded on home — still bump the header chat badge.
+  if (!view.isMine && !hadInbox) {
+    bumpChatUnreadTotal(queryClient, 1);
+  }
+
+  return view;
+}
+
+/** Instant delivered tick for the sender; DB persist is fire-and-forget. */
+function ackDeliveredAndNotify(params: {
+  queryClient: ReturnType<typeof useQueryClient>;
+  conversationId: string;
+  messageIds: string[];
+  byUserId: string;
+  threadChannel: RealtimeChannel | null;
+  senderUserId?: string | null;
+}) {
+  if (params.messageIds.length === 0) return;
+
+  const at = new Date().toISOString();
+  patchIncomingMessageTimestamps(params.queryClient, params.conversationId, {
+    messageIds: params.messageIds,
+    deliveredAt: at,
+  });
+
+  const receipt: ReceiptPayload = {
+    type: "delivered",
+    conversationId: params.conversationId,
+    messageIds: params.messageIds,
+    at,
+    byUserId: params.byUserId,
+  };
+
+  void sendBroadcast(params.threadChannel, "receipt", receipt);
+  if (params.senderUserId && params.senderUserId !== params.byUserId) {
+    void publishToUserChannel(params.senderUserId, "receipt", receipt);
+  }
+
+  void markChatMessagesDeliveredAction({
+    conversationId: params.conversationId,
+    messageIds: params.messageIds,
+  });
+}
+
+function applyReceipt(
+  queryClient: ReturnType<typeof useQueryClient>,
+  viewerId: string,
+  receipt: ReceiptPayload,
+) {
+  if (!receipt.messageIds?.length) return;
+  if (receipt.byUserId === viewerId) return;
+
+  if (receipt.type === "delivered") {
+    patchMessageReceipts(queryClient, receipt.conversationId, {
+      messageIds: receipt.messageIds,
+      viewerId,
+      deliveredAt: receipt.at,
+    });
+  } else {
+    patchMessageReceipts(queryClient, receipt.conversationId, {
+      messageIds: receipt.messageIds,
+      viewerId,
+      deliveredAt: receipt.at,
+      readAt: receipt.at,
+    });
+  }
+}
+
+export function useChatInbox(initial: ChatConversationListItem[]) {
+  return useQuery({
+    queryKey: queryKeys.chat.inbox(),
+    queryFn: async () => {
+      const result = await getChatInboxAction();
+      if (!result.ok) throw new Error(result.error.message);
+      return result.data;
+    },
+    initialData: initial,
+    staleTime: 5_000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** App-wide chat realtime: live messages, delivered ticks, priority toasts. */
+export function useChatUserRealtime(
+  userId: string | null,
+  options?: {
+    showToasts?: boolean;
+    pathname?: string | null;
+    navigate?: (href: string) => void;
+  },
+) {
+  const queryClient = useQueryClient();
+  const showToasts = options?.showToasts ?? false;
+  const pathname = options?.pathname ?? "";
+  const navigate = options?.navigate;
+  const pathnameRef = React.useRef(pathname);
+  const navigateRef = React.useRef(navigate);
+  pathnameRef.current = pathname ?? "";
+  navigateRef.current = navigate;
+
+  React.useEffect(() => {
+    if (!userId) return;
+
+    void getChatUnreadTotalAction().then((result) => {
+      if (result.ok) {
+        queryClient.setQueryData(queryKeys.chat.unreadTotal(), result.data);
+      }
+    });
+
+    const supabase = createClient();
+    const channel = supabase.channel(`chat-user:${userId}`, {
+      config: { broadcast: { self: false } },
+    });
+
+    channel.on("broadcast", { event: "message" }, ({ payload }) => {
+      const message = (payload as MessagePayload | undefined)?.message;
+      if (!message?.id || message.senderId === userId) return;
+
+      const view = applyIncomingMessage(queryClient, userId, message);
+
+      ackDeliveredAndNotify({
+        queryClient,
+        conversationId: view.conversationId,
+        messageIds: [view.id],
+        byUserId: userId,
+        threadChannel: null,
+        senderUserId: view.senderId,
+      });
+
+      if (showToasts && navigateRef.current) {
+        const onThread = pathnameRef.current === `/chat/${view.conversationId}`;
+        if (!onThread) {
+          const inbox = queryClient.getQueryData<ChatConversationListItem[]>(
+            queryKeys.chat.inbox(),
+          );
+          const peerName =
+            (payload as MessagePayload).senderName ||
+            inbox?.find((c) => c.id === view.conversationId)?.peer
+              .displayName ||
+            "Someone";
+          showChatMessageToast({
+            conversationId: view.conversationId,
+            messageId: view.id,
+            senderName: peerName,
+            preview: previewFromMessage({
+              body: view.body,
+              attachmentKind: view.attachment?.kind ?? null,
+              attachmentName: view.attachment?.name ?? null,
+            }),
+            navigate: navigateRef.current,
+          });
+        }
+      }
+    });
+
+    channel.on("broadcast", { event: "receipt" }, ({ payload }) => {
+      const receipt = payload as ReceiptPayload | undefined;
+      if (!receipt) return;
+      applyReceipt(queryClient, userId, receipt);
+    });
+
+    channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "conversations" },
+      () => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.chat.inbox(),
+          refetchType: "active",
+        });
+        void getChatUnreadTotalAction().then((result) => {
+          if (result.ok) {
+            queryClient.setQueryData(queryKeys.chat.unreadTotal(), result.data);
+          }
+        });
+      },
+    );
+
+    channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "messages" },
+      () => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.chat.inbox(),
+          refetchType: "active",
+        });
+      },
+    );
+
+    channel.subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [queryClient, userId, showToasts]);
+}
+export function useChatThread(params: {
+  conversationId: string | null;
+  initialHeader?: ChatThreadHeader | null;
+  initialPage?: ChatMessagesPage | null;
+  userId: string;
+  myName?: string;
+}) {
+  const { conversationId, userId } = params;
+  const myName = params.myName?.trim() || "Someone";
+  const queryClient = useQueryClient();
+  const channelRef = React.useRef<RealtimeChannel | null>(null);
+  const peerFanoutRef = React.useRef<RealtimeChannel | null>(null);
+  const peerId = params.initialHeader?.peer.id ?? null;
+
+  const headerQuery = useQuery({
+    queryKey: conversationId
+      ? [...queryKeys.chat.thread(conversationId), "header"]
+      : ["chat", "thread", "none"],
+    enabled: Boolean(conversationId),
+    queryFn: async () => {
+      const result = await getChatThreadAction(conversationId!);
+      if (!result.ok) throw new Error(result.error.message);
+      return result.data.header;
+    },
+    initialData: params.initialHeader ?? undefined,
+    staleTime: 30_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
+  });
+
+  const livePeerId = headerQuery.data?.peer.id ?? peerId;
+
+  React.useEffect(() => {
+    if (!livePeerId) return;
+    const supabase = createClient();
+    const channel = supabase.channel(`chat-user:${livePeerId}`, {
+      config: { broadcast: { self: false } },
+    });
+    peerFanoutRef.current = channel;
+    channel.subscribe();
+    return () => {
+      peerFanoutRef.current = null;
+      void supabase.removeChannel(channel);
+    };
+  }, [livePeerId]);
+
+  const messagesQuery = useInfiniteQuery({
+    queryKey: conversationId
+      ? queryKeys.chat.messages(conversationId)
+      : ["chat", "messages", "none"],
+    enabled: Boolean(conversationId),
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      const result = await listChatMessagesAction({
+        conversationId,
+        cursor: pageParam,
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      return result.data;
+    },
+    getNextPageParam: (last) => last.nextCursor,
+    initialData:
+      conversationId && params.initialPage
+        ? {
+            pages: [params.initialPage],
+            pageParams: [null],
+          }
+        : undefined,
+    staleTime: 30_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const messages = React.useMemo(() => {
+    const pages = messagesQuery.data?.pages ?? [];
+    const merged: ChatMessageView[] = [];
+    for (let i = pages.length - 1; i >= 0; i -= 1) {
+      merged.push(...(pages[i]?.messages ?? []));
+    }
+    const seen = new Set<string>();
+    return merged.filter((m) => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
+  }, [messagesQuery.data?.pages]);
+
+  React.useEffect(() => {
+    if (!conversationId) return;
+
+    const supabase = createClient();
+    const channel = supabase.channel(`chat-rt:${conversationId}`, {
+      config: { broadcast: { self: true } },
+    });
+
+    channel.on("broadcast", { event: "message" }, ({ payload }) => {
+      const message = (payload as MessagePayload | undefined)?.message;
+      if (!message?.id) return;
+
+      const view = applyIncomingMessage(queryClient, userId, message);
+      if (view.isMine) return;
+
+      void ackDeliveredAndNotify({
+        queryClient,
+        conversationId,
+        messageIds: [view.id],
+        byUserId: userId,
+        threadChannel: channelRef.current,
+        senderUserId: view.senderId,
+      });
+    });
+
+    channel.on("broadcast", { event: "receipt" }, ({ payload }) => {
+      const receipt = payload as ReceiptPayload | undefined;
+      if (!receipt) return;
+      applyReceipt(queryClient, userId, {
+        ...receipt,
+        conversationId: receipt.conversationId || conversationId,
+      });
+    });
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `conversation_id=eq.${conversationId}`,
+      },
+      () => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.chat.messages(conversationId),
+          refetchType: "active",
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.chat.inbox(),
+          refetchType: "active",
+        });
+      },
+    );
+
+    channel.on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "messages",
+        filter: `conversation_id=eq.${conversationId}`,
+      },
+      (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        const id = typeof row.id === "string" ? row.id : null;
+        if (!id) return;
+        patchMessageReceipts(queryClient, conversationId, {
+          messageIds: [id],
+          viewerId: userId,
+          deliveredAt:
+            typeof row.delivered_at === "string" ? row.delivered_at : null,
+          readAt: typeof row.read_at === "string" ? row.read_at : null,
+        });
+      },
+    );
+
+    channelRef.current = channel;
+    channel.subscribe();
+
+    return () => {
+      channelRef.current = null;
+      void supabase.removeChannel(channel);
+    };
+  }, [conversationId, queryClient, userId]);
+
+  const undeliveredKey = messages
+    .filter((m) => !m.isMine && !m.deliveredAt)
+    .map((m) => m.id)
+    .join(",");
+
+  React.useEffect(() => {
+    if (!conversationId || !undeliveredKey) return;
+    const ids = undeliveredKey.split(",");
+    void ackDeliveredAndNotify({
+      queryClient,
+      conversationId,
+      messageIds: ids,
+      byUserId: userId,
+      threadChannel: channelRef.current,
+      senderUserId: messages.find((m) => ids.includes(m.id))?.senderId ?? null,
+    });
+  }, [conversationId, undeliveredKey, userId, messages, queryClient]);
+
+  const unreadKey = messages
+    .filter((m) => !m.isMine && !m.readAt)
+    .map((m) => m.id)
+    .join(",");
+
+  React.useEffect(() => {
+    if (!conversationId || !unreadKey) return;
+    const ids = unreadKey.split(",");
+    const at = new Date().toISOString();
+
+    // Optimistic seen stamp + instant blue ticks for sender
+    patchIncomingMessageTimestamps(queryClient, conversationId, {
+      messageIds: ids,
+      deliveredAt: at,
+      readAt: at,
+    });
+
+    const senderIds = new Set(
+      messages.filter((m) => ids.includes(m.id)).map((m) => m.senderId),
+    );
+    const receipt: ReceiptPayload = {
+      type: "seen",
+      conversationId,
+      messageIds: ids,
+      at,
+      byUserId: userId,
+    };
+    void sendBroadcast(channelRef.current, "receipt", receipt);
+    for (const senderId of senderIds) {
+      if (senderId === userId) continue;
+      void publishToUserChannel(senderId, "receipt", receipt);
+    }
+
+    queryClient.setQueryData<ChatConversationListItem[]>(
+      queryKeys.chat.inbox(),
+      (prev) =>
+        prev?.map((c) =>
+          c.id === conversationId ? { ...c, unreadCount: 0 } : c,
+        ),
+    );
+    syncChatUnreadTotal(queryClient);
+
+    void markChatMessagesReadAction({ conversationId });
+  }, [conversationId, unreadKey, queryClient, userId, messages]);
+
+  React.useEffect(() => {
+    void touchLastSeenAction();
+    const id = window.setInterval(() => {
+      void touchLastSeenAction();
+    }, 60_000);
+    const onHide = () => {
+      void touchLastSeenAction();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+  }, []);
+
+  async function fanoutMessage(confirmed: ChatMessageView) {
+    const payload: MessagePayload = {
+      message: confirmed,
+      senderName: myName,
+    };
+    await sendBroadcast(channelRef.current, "message", payload);
+    await sendBroadcast(peerFanoutRef.current, "message", payload);
+  }
+
+  async function sendText(body: string, replyToId?: string | null) {
+    if (!conversationId)
+      return { ok: false as const, error: "No conversation" };
+    const clientId = `tmp-${crypto.randomUUID()}`;
+    const optimistic: ChatMessageView = {
+      id: clientId,
+      conversationId,
+      senderId: userId,
+      body,
+      createdAt: new Date().toISOString(),
+      deliveredAt: null,
+      readAt: null,
+      status: "sending",
+      isMine: true,
+      attachment: null,
+      replyTo: null,
+      optimistic: true,
+    };
+
+    patchAppendMessage(queryClient, conversationId, optimistic);
+    patchInboxPreview(queryClient, conversationId, optimistic, {
+      clearUnread: true,
+    });
+
+    const result = await sendChatTextMessageAction({
+      conversationId,
+      body,
+      replyToId,
+      clientId,
+    });
+
+    if (!result.ok) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.chat.messages(conversationId),
+      });
+      return result;
+    }
+
+    const confirmed: ChatMessageView = {
+      ...result.data,
+      status: "sent",
+      optimistic: false,
+    };
+    patchReplaceOptimistic(queryClient, conversationId, clientId, confirmed);
+    patchInboxPreview(queryClient, conversationId, confirmed, {
+      clearUnread: true,
+    });
+    void fanoutMessage(confirmed);
+
+    return { ok: true as const, data: confirmed };
+  }
+
+  async function sendAttachment(
+    file: File,
+    body = "",
+    replyToId?: string | null,
+  ) {
+    if (!conversationId)
+      return { ok: false as const, error: "No conversation" };
+    const form = new FormData();
+    form.set("conversationId", conversationId);
+    form.set("body", body);
+    if (replyToId) form.set("replyToId", replyToId);
+    form.set("file", file);
+    const result = await sendChatAttachmentAction(form);
+    if (result.ok) {
+      const confirmed: ChatMessageView = {
+        ...result.data,
+        status: "sent",
+        optimistic: false,
+      };
+      patchAppendMessage(queryClient, conversationId, confirmed);
+      patchInboxPreview(queryClient, conversationId, confirmed, {
+        clearUnread: true,
+      });
+      void fanoutMessage(confirmed);
+    }
+    return result;
+  }
+
+  async function hideMessage(messageId: string) {
+    const result = await hideChatMessageAction({ messageId });
+    if (result.ok && conversationId) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.chat.messages(conversationId),
+      });
+    }
+    return result;
+  }
+
+  return {
+    header: headerQuery.data ?? params.initialHeader ?? null,
+    messages,
+    messagesQuery,
+    sendText,
+    sendAttachment,
+    hideMessage,
+  };
+}
+
+export function useChatTyping(params: {
+  conversationId: string | null;
+  userId: string;
+  displayName: string;
+}) {
+  const [peerTypingName, setPeerTypingName] = React.useState<string | null>(
+    null,
+  );
+  const channelRef = React.useRef<RealtimeChannel | null>(null);
+  const stopTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    if (!params.conversationId) return;
+    const supabase = createClient();
+    const channel = supabase.channel(`typing:${params.conversationId}`, {
+      config: { broadcast: { self: false } },
+    });
+    channel.on("broadcast", { event: "typing" }, ({ payload }) => {
+      const name =
+        payload && typeof payload === "object"
+          ? (payload as { name?: string; userId?: string }).name
+          : null;
+      const fromId =
+        payload && typeof payload === "object"
+          ? (payload as { userId?: string }).userId
+          : null;
+      if (!name || fromId === params.userId) return;
+      setPeerTypingName(name);
+      if (stopTimer.current) clearTimeout(stopTimer.current);
+      stopTimer.current = setTimeout(() => setPeerTypingName(null), 2500);
+    });
+    channel.subscribe();
+    channelRef.current = channel;
+    return () => {
+      if (stopTimer.current) clearTimeout(stopTimer.current);
+      void supabase.removeChannel(channel);
+      channelRef.current = null;
+    };
+  }, [params.conversationId, params.userId]);
+
+  const notifyTyping = React.useCallback(() => {
+    void channelRef.current?.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { userId: params.userId, name: params.displayName },
+    });
+  }, [params.displayName, params.userId]);
+
+  return { peerTypingName, notifyTyping };
+}
+
+export function useChatPresence(userId: string, peerId?: string | null) {
+  const [onlineIds, setOnlineIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+
+  React.useEffect(() => {
+    if (!userId) return;
+
+    const supabase = createClient();
+    const channel = supabase.channel("samaanx-presence", {
+      config: { presence: { key: userId } },
+    });
+
+    const applySync = () => {
+      const state = channel.presenceState<{ userId?: string }>();
+      const next = new Set<string>();
+      for (const metas of Object.values(state)) {
+        for (const meta of metas) {
+          if (meta.userId) next.add(meta.userId);
+        }
+      }
+      next.add(userId);
+      setOnlineIds(next);
+    };
+
+    channel.on("presence", { event: "sync" }, applySync);
+    channel.on("presence", { event: "join" }, applySync);
+    channel.on("presence", { event: "leave" }, applySync);
+
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await channel.track({
+          userId,
+          online_at: new Date().toISOString(),
+        });
+        void touchLastSeenAction();
+        applySync();
+      }
+    });
+
+    return () => {
+      void channel.untrack();
+      void supabase.removeChannel(channel);
+      void touchLastSeenAction();
+    };
+  }, [userId]);
+
+  const isOnline = peerId ? onlineIds.has(peerId) : false;
+  return { isOnline, onlineIds };
+}

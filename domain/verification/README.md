@@ -1,2 +1,4 @@
-Phase 0 scaffold placeholder. Implementation deferred to later phases.
+# Verification domain
 
+Pure crypto helpers for QR payload signing and PIN derive/hash.
+No I/O. Consumed by `features/verification`.

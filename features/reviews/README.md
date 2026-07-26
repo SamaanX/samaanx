@@ -1,7 +1,15 @@
-# Feature: reviews
+# Reviews & Trust (Phase 7)
 
-Scaffold only (Phase 0).
+Public trust profiles, bilateral reviews after COMPLETED rentals, seller
+levels/badges, rating breakdown, and reporting dialogs.
 
-Implement business logic in later phases per Architecture Plan v1.2.
+## Key routes
 
-Internal layout: components, actions, api, schemas, services, queries, types, hooks.
+- `/profile/[id]` — public trust profile (marketplace)
+- `/rentals/[id]/review` — leave a review (app, auth required)
+
+## Server actions
+
+- `submitReviewAction`
+- `createReportAction`
+- `getPublicProfileAction`

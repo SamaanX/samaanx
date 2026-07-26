@@ -1,2 +1,7 @@
-Phase 0 scaffold placeholder. Implementation deferred to later phases.
+# Search domain
 
+Pure filter/sort contracts and Prisma where builders for marketplace discovery.
+
+- No I/O
+- No React
+- Consumed by `features/search`

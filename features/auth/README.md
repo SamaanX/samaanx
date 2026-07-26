@@ -1,7 +1,23 @@
-# Feature: auth
+# Auth feature — Phase 2A-1 Backend Foundation
 
-Scaffold only (Phase 0).
+Server-only authentication foundation (no UI in this phase).
 
-Implement business logic in later phases per Architecture Plan v1.2.
+## Contents
 
-Internal layout: components, actions, api, schemas, services, queries, types, hooks.
+- `actions/` — signUp, signIn, signOut, forgot/reset password, Google OAuth, guest, refresh
+- `schemas/` — Zod validation
+- `services/` — profile sync + error mapping
+- `types/` — shared auth types
+
+## Helpers (`lib/auth`)
+
+- `getCurrentUser` / `getSession` / `refreshSession`
+- `getCurrentProfile` / `requireUser` / `requireAdmin` / `requireGuest`
+- Route classifiers for middleware
+
+## Notes
+
+- Profile.id === auth.users.id
+- Guests / anonymous sessions never create profiles
+- Google requires provider enabled in Supabase + `/auth/callback` redirect allow-listed
+- Anonymous guest requires Anonymous Sign-Ins enabled in Supabase

@@ -1,7 +1,9 @@
-# Feature: chat
+# Chat (Phase 6)
 
-Scaffold only (Phase 0).
+Production messaging tied to rentals.
 
-Implement business logic in later phases per Architecture Plan v1.2.
-
-Internal layout: components, actions, api, schemas, services, queries, types, hooks.
+- Inbox: `/chat`
+- Thread: `/chat/[id]`
+- Realtime: Supabase `messages` / `conversations` + Presence + typing broadcast
+- Attachments: private `chat-media` bucket
+- Read-only when rental is rejected/cancelled

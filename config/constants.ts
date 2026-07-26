@@ -1,7 +1,12 @@
 /** App-level constants only — no business catalogs. */
 
-export const APP_NAME = "RentPe";
-export const APP_TAGLINE = "Rent Anything. From Anyone. Anywhere.";
+import { BRAND } from "@/config/brand";
+
+export const APP_NAME = BRAND.name;
+export const APP_TAGLINE = BRAND.tagline;
+export const APP_TAGLINE_LINES = BRAND.taglineLines;
+
+export { BRAND };
 
 /** Default locale for formatting helpers (Pakistan launch market). */
 export const DEFAULT_LOCALE = "en-PK";

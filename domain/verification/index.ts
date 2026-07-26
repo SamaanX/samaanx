@@ -1,0 +1,17 @@
+export {
+  buildQrPayload,
+  computeExpiresAt,
+  computeLockUntil,
+  derivePin,
+  hashPin,
+  LOCKOUT_MS,
+  MAX_PIN_ATTEMPTS,
+  newVerificationId,
+  type ParsedQrPayload,
+  parseQrPayload,
+  requireHmacSecret,
+  VERIFICATION_EXPIRY_MS,
+  type VerificationStageName,
+  verifyPinHash,
+  verifyQrPayload,
+} from "@/domain/verification/crypto";

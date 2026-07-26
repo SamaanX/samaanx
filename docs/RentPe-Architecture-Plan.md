@@ -1,7 +1,7 @@
-# RentPe — Phase 1: Product Foundation & Architecture Plan
+# SamaanX — Phase 1: Product Foundation & Architecture Plan
 
-**Project:** RentPe  
-**Tagline:** Rent Anything. From Anyone. Anywhere.  
+**Project:** SamaanX  
+**Tagline:** Apki Cheez. Apki Income.  
 **Document type:** Architecture plan (frozen)  
 **Status:** Frozen — do not change unless a critical issue is discovered  
 **Based on:** Software Requirements Specification v2.0 (08 May 2026)  
@@ -25,15 +25,15 @@
 
 ## How to use this document
 
-This is the **frozen** production architecture for rebuilding RentPe as a mobile-first Progressive Web App. Do not change it unless a critical issue is discovered. Implementation follows the phased roadmap with **One Phase = One Pull Request**.
+This is the **frozen** production architecture for rebuilding SamaanX as a mobile-first Progressive Web App. Do not change it unless a critical issue is discovered. Implementation follows the phased roadmap with **One Phase = One Pull Request**.
 
 ---
 
 ## 1. Product requirements review
 
-### 1.1 What RentPe is
+### 1.1 What SamaanX is
 
-RentPe is a **C2C (consumer-to-consumer) peer-to-peer rental marketplace** with a **location-aware architecture** and **Pakistan as the initial launch market**. Users list idle personal items; other users rent them temporarily. Trust is created through ratings, chat, and especially **QR Code + PIN dual verification** at handover and return.
+SamaanX is a **C2C (consumer-to-consumer) peer-to-peer rental marketplace** with a **location-aware architecture** and **Pakistan as the initial launch market**. Users list idle personal items; other users rent them temporarily. Trust is created through ratings, chat, and especially **QR Code + PIN dual verification** at handover and return.
 
 The data model and search design must support future expansion to additional countries **without structural redesign** (e.g. optional `countryCode` alongside city / area / lat / lng).
 
@@ -505,7 +505,7 @@ Support deposit strategy on listings (and rentals snapshot):
 
 UI should feel comparable to Airbnb / Facebook Marketplace / OLX / InDrive: modern, premium, clean, highly polished — **not** a student project aesthetic.
 
-### 11.1.1 RentPe Design Language
+### 11.1.1 SamaanX Design Language
 
 The application follows this design philosophy:
 
@@ -529,7 +529,7 @@ These principles guide tokens, components, and motion. They do not change the te
 - Design every screen for mobile first; desktop is responsive enhancement
 - Bottom navigation: 5 tabs, content switches by Buyer/Seller mode
 - Mode toggle on Home + Profile (persisted preference)
-- Design system: shadcn/ui + RentPe design tokens (color, type, spacing, motion)
+- Design system: shadcn/ui + SamaanX design tokens (color, type, spacing, motion)
 - Framer Motion: 2–3 purposeful motions (page transition, mode switch, verification success)
 - Lucide icons with consistent weight
 - `next/image` + Supabase URLs for listing media (see §15.1 image optimization)
@@ -891,7 +891,7 @@ Use these prompts when reviewing this plan with another advisor/model:
 
 | Field | Value |
 |-------|-------|
-| Product | RentPe |
+| Product | SamaanX |
 | Version | Architecture Plan 1.2 (frozen) |
 | Inputs | SRS v2.0 (May 2026) + stakeholder stack mandate + approved decisions + minor revision patches |
 | Output | Frozen architecture |
@@ -901,4 +901,4 @@ Use these prompts when reviewing this plan with another advisor/model:
 ---
 
 **Legal note (from SRS, retained):**  
-RentPe is a connecting platform only. It does not handle payments, delivery, or document verification. RentPe is not responsible for fraud, loss, or disputes. QR/PIN verification confirms handover/return events — not item condition or authenticity.
+SamaanX is a connecting platform only. It does not handle payments, delivery, or document verification. SamaanX is not responsible for fraud, loss, or disputes. QR/PIN verification confirms handover/return events — not item condition or authenticity.

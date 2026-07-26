@@ -13,7 +13,7 @@ export const defaultMetadata: Metadata = {
     template: `%s · ${APP_NAME}`,
   },
   description: APP_TAGLINE,
-  keywords: ["rental", "marketplace", "peer-to-peer", "RentPe"],
+  keywords: ["rental", "marketplace", "peer-to-peer", "SamaanX"],
   authors: [{ name: APP_NAME }],
   creator: APP_NAME,
   openGraph: {
@@ -47,4 +47,11 @@ export const defaultMetadata: Metadata = {
   formatDetection: {
     telephone: false,
   },
+  ...(process.env.NEXT_PUBLIC_GSC_VERIFICATION
+    ? {
+        verification: {
+          google: process.env.NEXT_PUBLIC_GSC_VERIFICATION,
+        },
+      }
+    : {}),
 };

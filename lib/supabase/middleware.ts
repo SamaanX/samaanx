@@ -1,7 +1,13 @@
 import { type CookieOptions, createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { getPublicEnv } from "@/config/env";
+import {
+  isAuthCallbackPath,
+  isAuthPage,
+  isProtectedPath,
+} from "@/lib/auth/routes";
 
 type CookieToSet = {
   name: string;
@@ -9,7 +15,41 @@ type CookieToSet = {
   options: CookieOptions;
 };
 
-export async function updateSession(request: NextRequest) {
+export type SessionUpdateResult = {
+  response: NextResponse;
+  user: User | null;
+};
+
+function hasSupabaseAuthCookie(request: NextRequest): boolean {
+  return request.cookies
+    .getAll()
+    .some(
+      (cookie) =>
+        cookie.name.includes("-auth-token") || cookie.name.startsWith("sb-"),
+    );
+}
+
+/**
+ * Refresh session when needed.
+ * Guest marketplace traffic with no auth cookie skips Auth RTT (Pakistan latency win).
+ */
+export async function updateSession(
+  request: NextRequest,
+): Promise<SessionUpdateResult> {
+  const pathname = request.nextUrl.pathname;
+  const needsAuthCheck =
+    isProtectedPath(pathname) ||
+    isAuthPage(pathname) ||
+    isAuthCallbackPath(pathname) ||
+    hasSupabaseAuthCookie(request);
+
+  if (!needsAuthCheck) {
+    return {
+      response: NextResponse.next({ request }),
+      user: null,
+    };
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -40,13 +80,27 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // Refresh auth session — required for Supabase SSR cookie pattern.
-  // Fail soft so local Phase 0 placeholders / unreachable Auth do not block the app shell.
+  let user: User | null = null;
+
   try {
-    await supabase.auth.getUser();
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
   } catch {
-    return supabaseResponse;
+    return { response: supabaseResponse, user: null };
   }
 
-  return supabaseResponse;
+  return { response: supabaseResponse, user };
+}
+
+/**
+ * Copies Supabase cookies from a session response onto a redirect response.
+ */
+export function copyCookies(
+  from: NextResponse,
+  to: NextResponse,
+): NextResponse {
+  from.cookies.getAll().forEach((cookie) => {
+    to.cookies.set(cookie.name, cookie.value);
+  });
+  return to;
 }
