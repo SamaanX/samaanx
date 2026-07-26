@@ -1,24 +1,24 @@
 "use server";
 
-import { getPublicEnv } from "@/config/env";
 import { toAuthActionError } from "@/features/auth/services/auth-errors";
 import type { AuthActionResult } from "@/features/auth/types/auth";
+import { resolveAuthRedirectOrigin } from "@/lib/auth/app-origin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * Starts Google OAuth. UI should redirect the browser to `url`.
  * Requires Google provider enabled in Supabase Auth settings.
  */
-export async function signInWithGoogleAction(): Promise<
-  AuthActionResult<{ url: string }>
-> {
-  const { NEXT_PUBLIC_APP_URL } = getPublicEnv();
+export async function signInWithGoogleAction(
+  clientOrigin?: string,
+): Promise<AuthActionResult<{ url: string }>> {
+  const appOrigin = resolveAuthRedirectOrigin(clientOrigin);
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${NEXT_PUBLIC_APP_URL}/auth/callback`,
+      redirectTo: `${appOrigin}/auth/callback`,
       queryParams: {
         access_type: "offline",
         prompt: "consent",

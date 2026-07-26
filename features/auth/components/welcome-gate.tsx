@@ -1,46 +1,40 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import * as React from "react";
 
-import { peekWelcomePending } from "@/features/auth/lib/welcome-session";
-import type { ProfileViewModel } from "@/features/profile/types/profile";
+import {
+  markWelcomePending,
+  peekWelcomePending,
+} from "@/features/auth/lib/welcome-session";
 
-const WelcomeScreen = dynamic(
-  () =>
-    import("@/features/auth/components/welcome-screen").then(
-      (mod) => mod.WelcomeScreen,
-    ),
-  { ssr: false },
-);
-
-type WelcomeProfile = Pick<
-  ProfileViewModel,
-  "displayName" | "phone" | "bio" | "city" | "area"
->;
+import { WelcomeScreen } from "./welcome-screen";
 
 type WelcomeGateProps = {
-  profile: WelcomeProfile | null;
+  isAuthenticated: boolean;
 };
 
 /**
- * Shows the post-auth welcome overlay when a client session flag is set.
- * Dynamically loads WelcomeScreen (framer-motion) only when needed.
+ * Post-auth rent/sell chooser — reads session flag synchronously (no extra Suspense/DB wait).
  */
-export function WelcomeGate({ profile }: WelcomeGateProps) {
+export function WelcomeGate({ isAuthenticated }: WelcomeGateProps) {
   const [show, setShow] = React.useState(false);
 
-  React.useEffect(() => {
-    if (!profile) {
-      setShow(false);
-      return;
+  React.useLayoutEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("welcome") === "1") {
+      markWelcomePending();
+      params.delete("welcome");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${qs ? `?${qs}` : ""}`,
+      );
     }
-    setShow(peekWelcomePending());
-  }, [profile]);
+    setShow(isAuthenticated && peekWelcomePending());
+  }, [isAuthenticated]);
 
-  if (!show || !profile) {
-    return null;
-  }
+  if (!show) return null;
 
-  return <WelcomeScreen profile={profile} />;
+  return <WelcomeScreen />;
 }

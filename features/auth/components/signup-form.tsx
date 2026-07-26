@@ -15,7 +15,6 @@ import { FieldError, FormAlert } from "@/features/auth/components/form-alert";
 import { LoadingButton } from "@/features/auth/components/loading-button";
 import { PasswordInput } from "@/features/auth/components/password-input";
 import { SocialLoginButton } from "@/features/auth/components/social-login-button";
-import { markWelcomePending } from "@/features/auth/lib/welcome-session";
 import {
   signUpFormSchema,
   type SignUpFormValues,
@@ -65,7 +64,6 @@ export function SignupForm() {
       return;
     }
 
-    markWelcomePending();
     trackEvent("signup");
     // Full navigation so marketplace layout re-reads the new auth cookies.
     window.location.assign("/");

@@ -33,7 +33,10 @@ export function ForgotPasswordForm() {
     setFormError(null);
     setSuccess(null);
 
-    const result = await forgotPasswordAction(values);
+    const result = await forgotPasswordAction(
+      values,
+      typeof window !== "undefined" ? window.location.origin : undefined,
+    );
 
     if (!result.ok) {
       setFormError(result.error.message);

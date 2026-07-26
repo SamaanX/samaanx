@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
@@ -10,22 +9,12 @@ import { SamaanXLogo } from "@/components/brand/samaanx-logo";
 import { buttonVariants } from "@/components/ui/button";
 import { APP_NAME } from "@/config/constants";
 import { clearWelcomePending } from "@/features/auth/lib/welcome-session";
-import type { ProfileViewModel } from "@/features/profile/types/profile";
 import { savePreferredMode } from "@/features/profile/utils/save-preferred-mode";
 import { cn } from "@/lib/utils";
 
-type WelcomeProfile = Pick<
-  ProfileViewModel,
-  "displayName" | "phone" | "bio" | "city" | "area"
->;
-
-type WelcomeScreenProps = {
-  profile: WelcomeProfile;
-};
-
 type Choice = "BUYER" | "SELLER";
 
-export function WelcomeScreen({ profile: _profile }: WelcomeScreenProps) {
+export function WelcomeScreen() {
   const router = useRouter();
   const [pending, setPending] = React.useState<Choice | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -63,12 +52,7 @@ export function WelcomeScreen({ profile: _profile }: WelcomeScreenProps) {
       </div>
 
       <div className="relative mx-auto flex min-h-dvh w-full max-w-3xl flex-col justify-center px-4 py-10 sm:px-6 sm:py-14">
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
-          className="text-center"
-        >
+        <div className="animate-in fade-in slide-in-from-bottom-2 text-center duration-200">
           <SamaanXLogo
             href={null}
             priority
@@ -84,9 +68,9 @@ export function WelcomeScreen({ profile: _profile }: WelcomeScreenProps) {
           <p className="text-muted-foreground mt-5 text-sm sm:text-base">
             What would you like to do today?
           </p>
-        </motion.div>
+        </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 sm:gap-5">
+        <div className="animate-in fade-in slide-in-from-bottom-3 mt-8 grid gap-4 duration-300 sm:grid-cols-2 sm:gap-5">
           <WelcomeCard
             emoji="🛒"
             title="Rent an Item"
@@ -96,7 +80,6 @@ export function WelcomeScreen({ profile: _profile }: WelcomeScreenProps) {
             loading={pending === "BUYER"}
             disabled={pending !== null}
             accent="blue"
-            delay={0.08}
           />
           <WelcomeCard
             emoji="💰"
@@ -107,7 +90,6 @@ export function WelcomeScreen({ profile: _profile }: WelcomeScreenProps) {
             loading={pending === "SELLER"}
             disabled={pending !== null}
             accent="green"
-            delay={0.14}
           />
         </div>
 
@@ -134,7 +116,6 @@ type WelcomeCardProps = {
   loading: boolean;
   disabled: boolean;
   accent: "blue" | "green";
-  delay: number;
 };
 
 function WelcomeCard({
@@ -146,13 +127,9 @@ function WelcomeCard({
   loading,
   disabled,
   accent,
-  delay,
 }: WelcomeCardProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay, ease: [0.2, 0.8, 0.2, 1] }}
+    <div
       className={cn(
         "bg-card flex flex-col rounded-3xl border p-6 shadow-[var(--rp-shadow-md)] sm:p-7",
         accent === "blue" ? "border-brand-blue/25" : "border-brand-green/25",
@@ -191,6 +168,6 @@ function WelcomeCard({
           actionLabel
         )}
       </button>
-    </motion.div>
+    </div>
   );
 }

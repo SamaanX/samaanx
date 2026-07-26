@@ -8,7 +8,7 @@ import { SamaanXLogo } from "@/components/brand/samaanx-logo";
 import { APP_NAME } from "@/config/constants";
 import { SPLASH_SEEN_KEY } from "@/features/auth/lib/welcome-session";
 
-const SPLASH_MS = 1400;
+const SPLASH_MS = 900;
 
 /**
  * Brief first-visit-per-session splash — logo + official tagline.

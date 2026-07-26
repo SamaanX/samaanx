@@ -5,7 +5,6 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { signInWithGoogleAction } from "@/features/auth/actions/sign-in-google";
-import { markWelcomePending } from "@/features/auth/lib/welcome-session";
 import { cn } from "@/lib/utils";
 
 type SocialLoginButtonProps = {
@@ -47,7 +46,7 @@ export function SocialLoginButton({
     setLoading(true);
     setError(null);
 
-    const result = await signInWithGoogleAction();
+    const result = await signInWithGoogleAction(window.location.origin);
 
     if (!result.ok) {
       setError(result.error.message);
@@ -55,7 +54,6 @@ export function SocialLoginButton({
       return;
     }
 
-    markWelcomePending();
     window.location.href = result.data.url;
   }
 

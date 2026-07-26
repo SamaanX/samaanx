@@ -1,13 +1,14 @@
 "use server";
 
-import { getPublicEnv } from "@/config/env";
 import { forgotPasswordSchema } from "@/features/auth/schemas/auth";
 import { toAuthActionError } from "@/features/auth/services/auth-errors";
 import type { AuthActionResult } from "@/features/auth/types/auth";
+import { resolveAuthRedirectOrigin } from "@/lib/auth/app-origin";
 import { createClient } from "@/lib/supabase/server";
 
 export async function forgotPasswordAction(
   input: unknown,
+  clientOrigin?: string,
 ): Promise<AuthActionResult<{ success: true }>> {
   const parsed = forgotPasswordSchema.safeParse(input);
 
@@ -21,13 +22,13 @@ export async function forgotPasswordAction(
     };
   }
 
-  const { NEXT_PUBLIC_APP_URL } = getPublicEnv();
+  const appOrigin = resolveAuthRedirectOrigin(clientOrigin);
   const supabase = await createClient();
 
   const { error } = await supabase.auth.resetPasswordForEmail(
     parsed.data.email,
     {
-      redirectTo: `${NEXT_PUBLIC_APP_URL}/reset-password`,
+      redirectTo: `${appOrigin}/reset-password`,
     },
   );
 

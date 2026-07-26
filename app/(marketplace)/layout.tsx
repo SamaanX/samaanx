@@ -9,7 +9,6 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { CriticalActivitySlot } from "@/features/activity/components/critical-activity-slot";
 import { isAdminRole } from "@/features/admin/services/permissions";
-import { WelcomeGate } from "@/features/auth/components/welcome-gate";
 import { HeaderNotifications } from "@/features/notifications/components/header-notifications";
 import { toProfileViewModel } from "@/features/profile/types/profile";
 import { getCurrentProfile } from "@/lib/auth/guards";
@@ -68,10 +67,6 @@ export default function MarketplaceLayout({
             >
               <MarketplaceFooter />
             </Suspense>
-
-            <Suspense fallback={null}>
-              <MarketplaceWelcome />
-            </Suspense>
           </div>
         </div>
       </RealtimeUserBridge>
@@ -120,23 +115,6 @@ async function MarketplaceActivityBanner() {
   const preferredMode = profile.preferredMode === "SELLER" ? "SELLER" : "BUYER";
   return (
     <CriticalActivitySlot userId={profile.id} preferredMode={preferredMode} />
-  );
-}
-
-async function MarketplaceWelcome() {
-  const profile = await getCurrentProfile();
-  if (!profile) return null;
-  const profileView = toProfileViewModel(profile);
-  return (
-    <WelcomeGate
-      profile={{
-        displayName: profileView.displayName,
-        phone: profileView.phone,
-        bio: profileView.bio,
-        city: profileView.city,
-        area: profileView.area,
-      }}
-    />
   );
 }
 
