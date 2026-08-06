@@ -11,20 +11,25 @@ import { isAdminRole } from "@/features/admin/services/permissions";
 import { HeaderNotifications } from "@/features/notifications/components/header-notifications";
 import { toProfileViewModel } from "@/features/profile/types/profile";
 import { getCurrentProfile } from "@/lib/auth/guards";
+import { getCurrentUser, isAnonymousUser } from "@/lib/auth/session";
 import { withPerf } from "@/lib/perf";
 import { PreferredModeProvider } from "@/providers/preferred-mode-provider";
 
 /**
  * App shell: stream auth chrome; never block {children} on profile.
+ * Realtime subscribes immediately using session user id (no profile DB wait).
  */
-export default function AppLayout({
+export default async function AppLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const user = await getCurrentUser();
+  const initialUserId = user && !isAnonymousUser(user) ? user.id : null;
+
   return (
     <PreferredModeProvider initialMode="BUYER">
-      <RealtimeUserBridge>
+      <RealtimeUserBridge initialUserId={initialUserId}>
         <div className="bg-background relative min-h-dvh">
           <div
             aria-hidden

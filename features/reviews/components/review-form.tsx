@@ -1,11 +1,13 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { afterLiveMutation } from "@/features/realtime/live-sync";
 import { submitReviewAction } from "@/features/reviews/actions/review-actions";
 import type { ReviewEligibleRental } from "@/features/reviews/types/review";
 import { StarRatingInput } from "@/features/trust/components/star-rating";
@@ -17,6 +19,7 @@ type ReviewFormProps = {
 };
 
 export function ReviewForm({ eligibility, onSubmitted }: ReviewFormProps) {
+  const queryClient = useQueryClient();
   const [rating, setRating] = React.useState(5);
   const [comment, setComment] = React.useState("");
   const [pending, setPending] = React.useState(false);
@@ -51,6 +54,9 @@ export function ReviewForm({ eligibility, onSubmitted }: ReviewFormProps) {
     setDone(true);
     trackEvent("review_submitted", { rental_id: eligibility.rentalId });
     toast.success("Review submitted");
+    afterLiveMutation(queryClient, [result.data.revieweeId], {
+      surfaces: ["activity"],
+    });
     onSubmitted?.();
   }
 

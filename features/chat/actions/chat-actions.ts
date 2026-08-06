@@ -16,6 +16,7 @@ import {
   chatReadonlyError,
   toChatActionError,
 } from "@/features/chat/services/chat-errors";
+import { broadcastChatMessage } from "@/features/chat/services/chat-realtime-server";
 import { uploadChatAttachment } from "@/features/chat/services/chat-storage";
 import {
   previewFromMessage,
@@ -279,9 +280,18 @@ export async function sendChatTextMessageAction(
       }),
     ]);
 
+    const view = toChatMessageView(created.message, profile.id);
+
+    await broadcastChatMessage({
+      peerId: created.peerId,
+      conversationId: conversation.id,
+      message: view,
+      senderName: profile.displayName,
+    });
+
     return {
       ok: true,
-      data: toChatMessageView(created.message, profile.id),
+      data: view,
     };
   } catch (error) {
     logger.error("sendChatTextMessageAction failed", {
@@ -399,9 +409,18 @@ export async function sendChatAttachmentAction(
       }),
     ]);
 
+    const view = toChatMessageView(created.message, profile.id);
+
+    await broadcastChatMessage({
+      peerId: created.peerId,
+      conversationId,
+      message: view,
+      senderName: profile.displayName,
+    });
+
     return {
       ok: true,
-      data: toChatMessageView(created.message, profile.id),
+      data: view,
     };
   } catch (error) {
     logger.error("sendChatAttachmentAction failed", {

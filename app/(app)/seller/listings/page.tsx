@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { BackButton } from "@/components/navigation/back-button";
 import { BACK_FALLBACKS } from "@/components/navigation/back-fallbacks";
@@ -14,6 +15,24 @@ export const metadata = {
   description: "Manage your SamaanX seller listings.",
 };
 
+function ListingsSkeleton() {
+  return (
+    <div className="space-y-3">
+      <div className="bg-muted h-28 animate-pulse rounded-2xl" />
+      <div className="bg-muted h-28 animate-pulse rounded-2xl" />
+      <div className="bg-muted h-28 animate-pulse rounded-2xl" />
+    </div>
+  );
+}
+
+async function SellerListingsContent({ profileId }: { profileId: string }) {
+  const listings = await withPerf("route.seller.listings", () =>
+    getSellerListings(profileId),
+  );
+
+  return <SellerListingsPanel initial={listings} />;
+}
+
 export default async function SellerListingsPage() {
   let profileId: string;
   try {
@@ -25,10 +44,6 @@ export default async function SellerListingsPage() {
     }
     throw error;
   }
-
-  const listings = await withPerf("route.seller.listings", () =>
-    getSellerListings(profileId),
-  );
 
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pb-16 sm:px-6">
@@ -45,7 +60,9 @@ export default async function SellerListingsPage() {
         </div>
       </header>
 
-      <SellerListingsPanel initial={listings} />
+      <Suspense fallback={<ListingsSkeleton />}>
+        <SellerListingsContent profileId={profileId} />
+      </Suspense>
     </div>
   );
 }

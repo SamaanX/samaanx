@@ -12,13 +12,23 @@ type RealtimeUserContextValue = {
 const RealtimeUserContext =
   React.createContext<RealtimeUserContextValue | null>(null);
 
-/** Root bridge: starts with null userId so layout chrome can stream first. */
+/**
+ * Root bridge: receives server-resolved userId so Realtime channels subscribe
+ * on the first client paint (no delayed hydration gap).
+ */
 export function RealtimeUserBridge({
   children,
+  initialUserId = null,
 }: {
   children: React.ReactNode;
+  initialUserId?: string | null;
 }) {
-  const [userId, setUserId] = React.useState<string | null>(null);
+  const [userId, setUserId] = React.useState(initialUserId);
+
+  React.useLayoutEffect(() => {
+    setUserId(initialUserId);
+  }, [initialUserId]);
+
   const value = React.useMemo(() => ({ userId, setUserId }), [userId]);
 
   return (
@@ -28,7 +38,7 @@ export function RealtimeUserBridge({
   );
 }
 
-/** Hydrate authenticated userId as early as possible (before paint). */
+/** Keep userId in sync when auth header streams a profile id. */
 export function RealtimeUserHydrator({ userId }: { userId: string | null }) {
   const ctx = React.useContext(RealtimeUserContext);
 

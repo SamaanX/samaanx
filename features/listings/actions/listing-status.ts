@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
 import { ActionTimeline } from "@/lib/perf/action-timeline";
+import { scheduleLiveSyncAfterResponse } from "@/lib/realtime/schedule-live-sync";
 import { createClient } from "@/lib/supabase/server";
 
 function revalidateSellerPaths(_listingId: string) {
@@ -64,6 +65,7 @@ export async function deleteListingAction(
     after(() => {
       revalidateSellerPaths(listingId);
     });
+    scheduleLiveSyncAfterResponse([profile.id]);
     return { ok: true, data: { success: true } };
   } catch (error) {
     logger.error("deleteListingAction failed", {
@@ -130,6 +132,7 @@ export async function publishListingAction(
     timeline.mark("Listing status update");
 
     scheduleSellerPathsRevalidation(timeline);
+    scheduleLiveSyncAfterResponse([profile.id]);
     timeline.done("publishListingAction");
     return { ok: true, data: { success: true } };
   } catch (error) {
@@ -176,6 +179,7 @@ export async function pauseListingAction(
     after(() => {
       revalidateSellerPaths(listingId);
     });
+    scheduleLiveSyncAfterResponse([profile.id]);
     return { ok: true, data: { success: true } };
   } catch (error) {
     logger.error("pauseListingAction failed", {
@@ -209,6 +213,7 @@ export async function archiveListingAction(
     after(() => {
       revalidateSellerPaths(listingId);
     });
+    scheduleLiveSyncAfterResponse([profile.id]);
     return { ok: true, data: { success: true } };
   } catch (error) {
     logger.error("archiveListingAction failed", {

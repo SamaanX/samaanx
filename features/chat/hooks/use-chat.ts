@@ -31,6 +31,7 @@ import {
 } from "@/features/chat/lib/chat-cache";
 import { showChatMessageToast } from "@/features/chat/services/chat-toast";
 import { previewFromMessage } from "@/features/chat/services/mappers";
+import { chatMessageViewFromPostgresRow } from "@/features/chat/services/postgres-message";
 import type {
   ChatConversationListItem,
   ChatMessagesPage,
@@ -313,11 +314,12 @@ export function useChatUserRealtime(
     channel.on(
       "postgres_changes",
       { event: "INSERT", schema: "public", table: "messages" },
-      () => {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.chat.inbox(),
-          refetchType: "active",
-        });
+      (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        const message = chatMessageViewFromPostgresRow(row, userId);
+        if (!message || message.senderId === userId) return;
+
+        applyIncomingMessage(queryClient, userId, message);
       },
     );
 
@@ -458,14 +460,21 @@ export function useChatThread(params: {
         table: "messages",
         filter: `conversation_id=eq.${conversationId}`,
       },
-      () => {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.chat.messages(conversationId),
-          refetchType: "active",
-        });
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.chat.inbox(),
-          refetchType: "active",
+      (payload) => {
+        const row = payload.new as Record<string, unknown>;
+        const message = chatMessageViewFromPostgresRow(row, userId);
+        if (!message) return;
+
+        const view = applyIncomingMessage(queryClient, userId, message);
+        if (view.isMine) return;
+
+        void ackDeliveredAndNotify({
+          queryClient,
+          conversationId,
+          messageIds: [view.id],
+          byUserId: userId,
+          threadChannel: channelRef.current,
+          senderUserId: view.senderId,
         });
       },
     );
@@ -584,8 +593,10 @@ export function useChatThread(params: {
       message: confirmed,
       senderName: myName,
     };
-    await sendBroadcast(channelRef.current, "message", payload);
-    await sendBroadcast(peerFanoutRef.current, "message", payload);
+    await Promise.all([
+      sendBroadcast(channelRef.current, "message", payload),
+      sendBroadcast(peerFanoutRef.current, "message", payload),
+    ]);
   }
 
   async function sendText(body: string, replyToId?: string | null) {

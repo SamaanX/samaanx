@@ -25,7 +25,7 @@ export function SellerListingsPanel({ initial }: SellerListingsPanelProps) {
     staleTime: 60_000,
     refetchOnMount: false,
     placeholderData: (prev) => prev,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchInterval: false,
   });
 

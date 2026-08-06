@@ -28,6 +28,7 @@ import { VerificationStateScreen } from "@/features/verification/components/veri
 import type { VerificationStatusView } from "@/features/verification/types/verification";
 import { trackEvent } from "@/lib/analytics/events";
 import { queryKeys } from "@/lib/query-keys";
+import { useRealtimeRentalSync } from "@/providers/realtime-sync-provider";
 
 type VerificationPanelProps = {
   initial: VerificationStatusView;
@@ -65,9 +66,16 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
 
   const status = statusQuery.data ?? initial;
 
-  async function refreshStatus() {
+  const refreshStatus = React.useCallback(async () => {
     await statusQuery.refetch();
-  }
+  }, [statusQuery]);
+
+  useRealtimeRentalSync(
+    React.useCallback(() => {
+      void refreshStatus();
+    }, [refreshStatus]),
+    initial.rentalId,
+  );
 
   async function run<T>(
     action: () => Promise<
@@ -141,19 +149,10 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
           title="Temporarily locked"
           description={
             status.lockedUntil
-              ? `Too many failed attempts. Try again after ${new Date(status.lockedUntil).toLocaleTimeString()}.`
-              : "Too many failed attempts. Please wait and try again."
+              ? `Too many failed attempts. Try again after ${new Date(status.lockedUntil).toLocaleTimeString()}. Status updates automatically when the lockout ends.`
+              : "Too many failed attempts. Please wait — status will refresh automatically."
           }
         />
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          disabled={busy}
-          onClick={() => void refreshStatus()}
-        >
-          Refresh status
-        </Button>
       </div>
     );
   }

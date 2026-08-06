@@ -17,7 +17,7 @@ import {
 import { FormMessage } from "@/features/listings/components/form-message";
 import { ListingStatusBadge } from "@/features/listings/components/listing-status-badge";
 import type { SellerListingCardView } from "@/features/listings/types/listing";
-import { queryKeys } from "@/lib/query-keys";
+import { bumpLiveSurfaces } from "@/features/realtime/live-sync";
 
 type SellerListingCardProps = {
   listing: SellerListingCardView;
@@ -66,10 +66,7 @@ export function SellerListingCard({ listing }: SellerListingCardProps) {
       setError(result.error.message);
       return;
     }
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.sellerListings.all,
-      refetchType: "active",
-    });
+    bumpLiveSurfaces(queryClient, ["sellerListings"]);
   }
 
   return (

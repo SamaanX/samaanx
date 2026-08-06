@@ -17,6 +17,7 @@ import { requireUser } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 import { AppError } from "@/lib/errors/app-error";
 import { logger } from "@/lib/logger";
+import { scheduleLiveSyncAfterResponse } from "@/lib/realtime/schedule-live-sync";
 
 export async function getPublicProfileAction(
   profileId: string,
@@ -143,6 +144,8 @@ export async function submitReviewAction(
       await recomputeProfileRating(revieweeId, tx);
       return created;
     });
+
+    scheduleLiveSyncAfterResponse([profile.id, revieweeId]);
 
     return {
       ok: true,

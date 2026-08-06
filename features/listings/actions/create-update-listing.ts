@@ -21,6 +21,7 @@ import { requireUser } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
 import { ActionTimeline } from "@/lib/perf/action-timeline";
+import { scheduleLiveSyncAfterResponse } from "@/lib/realtime/schedule-live-sync";
 import { createClient } from "@/lib/supabase/server";
 
 function revalidateSellerListingPaths() {
@@ -256,6 +257,7 @@ export async function registerListingImagesAction(
     timeline.mark("Image database writes");
 
     scheduleSellerListingRevalidation(timeline);
+    scheduleLiveSyncAfterResponse([profile.id]);
     timeline.done("registerListingImagesAction");
     return { ok: true, data: { id: listingId } };
   } catch (error) {
