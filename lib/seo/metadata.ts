@@ -16,6 +16,11 @@ export const defaultMetadata: Metadata = {
   keywords: ["rental", "marketplace", "peer-to-peer", "SamaanX"],
   authors: [{ name: APP_NAME }],
   creator: APP_NAME,
+  icons: {
+    icon: "/icon.png",
+    shortcut: "/favicon.ico",
+    apple: "/apple-icon.png",
+  },
   openGraph: {
     type: "website",
     locale: "en_PK",
