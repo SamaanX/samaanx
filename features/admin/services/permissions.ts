@@ -18,6 +18,7 @@ export type AdminPermission =
   | "sellers.manage"
   | "listings.moderate"
   | "reports.manage"
+  | "feedback.manage"
   | "disputes.manage"
   | "analytics.view"
   | "search.global"
@@ -33,6 +34,7 @@ const SUPER_ADMIN_PERMISSIONS: AdminPermission[] = [
   "sellers.manage",
   "listings.moderate",
   "reports.manage",
+  "feedback.manage",
   "disputes.manage",
   "analytics.view",
   "search.global",
@@ -48,6 +50,7 @@ const ADMIN_PERMISSIONS: AdminPermission[] = [
   "sellers.manage",
   "listings.moderate",
   "reports.manage",
+  "feedback.manage",
   "disputes.manage",
   "analytics.view",
   "search.global",

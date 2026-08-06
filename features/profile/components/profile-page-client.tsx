@@ -5,6 +5,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { buttonVariants } from "@/components/ui/button";
+import { FeedbackCard } from "@/features/feedback/components/feedback-card";
 import { NotificationSettings } from "@/features/notifications/components/notification-settings";
 import { AccountSettings } from "@/features/profile/components/account-settings";
 import { ProfileEditForm } from "@/features/profile/components/profile-edit-form";
@@ -45,6 +46,7 @@ export function ProfilePageClient({ initialProfile }: ProfilePageClientProps) {
         <ProfileEditForm profile={profile} onProfileChange={setProfile} />
         <div className="space-y-6">
           <NotificationSettings />
+          <FeedbackCard />
           <AccountSettings />
         </div>
       </div>

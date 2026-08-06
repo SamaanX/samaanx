@@ -1,6 +1,7 @@
 import type {
   AnnouncementTarget,
   DisputeStatus,
+  FeedbackStatus,
   ListingModerationStatus,
   ProfileStatus,
   ReportStatus,
@@ -24,6 +25,7 @@ export type AdminDashboardStats = {
   rentals: number;
   completedRentals: number;
   openReports: number;
+  openFeedback: number;
   openDisputes: number;
   revenuePlaceholder: number;
 };
@@ -70,6 +72,19 @@ export type AdminReportRow = {
   reason: string;
   status: ReportStatus;
   reporterName: string;
+  createdAt: string;
+};
+
+export type AdminFeedbackRow = {
+  id: string;
+  category: string;
+  subject: string;
+  message: string;
+  pageUrl: string | null;
+  status: FeedbackStatus;
+  adminNotes: string | null;
+  userName: string;
+  userEmail: string;
   createdAt: string;
 };
 

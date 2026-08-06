@@ -191,6 +191,21 @@ enum ReportStatus {
   DISMISSED
 }
 
+enum FeedbackCategory {
+  BUG
+  FEATURE
+  UX
+  GENERAL
+  OTHER
+}
+
+enum FeedbackStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
 enum ReviewTarget {
   USER
 }
@@ -261,6 +276,8 @@ model Profile {
   notifications            Notification[]
   reportsFiled             Report[]                 @relation("ReportReporter")
   reportsAssigned          Report[]                 @relation("ReportAssignee")
+  feedbackSubmitted        UserFeedback[]           @relation("FeedbackSubmitter")
+  feedbackAssigned         UserFeedback[]           @relation("FeedbackAssignee")
   disputesOpened           Dispute[]                @relation("DisputeOpener")
   disputesAssigned         Dispute[]                @relation("DisputeAssignee")
   listingsModerated        Listing[]                @relation("ListingModerator")
@@ -693,6 +710,29 @@ model Report {
   @@index([targetType, targetId])
   @@index([reporterId])
   @@map("reports")
+}
+
+model UserFeedback {
+  id              String           @id @default(uuid()) @db.Uuid
+  userId          String           @map("user_id") @db.Uuid
+  category        FeedbackCategory
+  subject         String           @db.VarChar(120)
+  message         String
+  pageUrl         String?          @map("page_url")
+  status          FeedbackStatus   @default(OPEN)
+  assignedAdminId String?          @map("assigned_admin_id") @db.Uuid
+  adminNotes      String?          @map("admin_notes")
+  resolvedAt      DateTime?        @map("resolved_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user            Profile          @relation("FeedbackSubmitter", fields: [userId], references: [id], onDelete: Restrict)
+  assignedAdmin   Profile?         @relation("FeedbackAssignee", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([category])
+  @@map("user_feedback")
 }
 
 /// Append-only audit trail. No updatedAt / soft delete.

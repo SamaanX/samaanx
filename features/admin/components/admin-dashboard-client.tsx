@@ -84,6 +84,11 @@ export function AdminDashboardClient({
           tone="warning"
         />
         <StatCard
+          label="Open feedback"
+          value={stats.openFeedback}
+          tone="warning"
+        />
+        <StatCard
           label="Open disputes"
           value={stats.openDisputes}
           tone="danger"

@@ -22,6 +22,7 @@ export const getAdminDashboardStats = cache(
       rentals,
       completedRentals,
       openReports,
+      openFeedback,
       openDisputes,
     ] = await Promise.all([
       prisma.profile.count({ where: { deletedAt: null } }),
@@ -57,6 +58,9 @@ export const getAdminDashboardStats = cache(
       prisma.report.count({
         where: { status: { in: ["OPEN", "IN_REVIEW"] } },
       }),
+      prisma.userFeedback.count({
+        where: { status: { in: ["OPEN", "IN_REVIEW"] } },
+      }),
       prisma.dispute.count({
         where: { status: { in: ["OPEN", "UNDER_REVIEW"] } },
       }),
@@ -74,6 +78,7 @@ export const getAdminDashboardStats = cache(
       rentals,
       completedRentals,
       openReports,
+      openFeedback,
       openDisputes,
       revenuePlaceholder: 0,
     };
