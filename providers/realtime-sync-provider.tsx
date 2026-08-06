@@ -122,8 +122,30 @@ export function RealtimeSyncProvider({
           table: "notifications",
           filter: `user_id=eq.${userId}`,
         },
-        () => {
-          // Notifications alone — do not fan out to rentals/listings/chat.
+        (payload) => {
+          const row = (payload.new ?? payload.old) as
+            | {
+                rental_id?: string;
+                payload?: { rentalId?: string } | null;
+              }
+            | undefined;
+          const payloadRentalId =
+            row?.payload &&
+            typeof row.payload === "object" &&
+            "rentalId" in row.payload &&
+            typeof row.payload.rentalId === "string"
+              ? row.payload.rentalId
+              : null;
+          const rentalId =
+            typeof row?.rental_id === "string"
+              ? row.rental_id
+              : payloadRentalId;
+
+          if (rentalId) {
+            bump(rentalId);
+            return;
+          }
+
           void queryClient.invalidateQueries({
             queryKey: queryKeys.notifications.all,
             refetchType: "active",

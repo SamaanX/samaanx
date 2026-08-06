@@ -292,8 +292,8 @@ export async function approveRentalRequestAction(
       listingTitle: rental.listing.title,
       stage: "HANDOVER",
     });
-    after(() => {
-      void scheduleRentalReminderJobs({
+    after(async () => {
+      await scheduleRentalReminderJobs({
         rentalId: rental.id,
         buyerId: rental.buyerId,
         sellerId: rental.sellerId,

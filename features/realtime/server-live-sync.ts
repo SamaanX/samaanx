@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 import { postSupabaseBroadcast } from "@/lib/realtime/supabase-broadcast";
 
 type LiveSyncPayload = {
@@ -28,5 +29,17 @@ export async function wakeUsersLiveSync(
     payload,
   }));
 
-  await postSupabaseBroadcast(messages);
+  const result = await postSupabaseBroadcast(messages, {
+    userIds: unique,
+    rentalId: options?.rentalId ?? null,
+  });
+
+  if (!result.ok) {
+    logger.error("wakeUsersLiveSync broadcast failed", {
+      userIds: unique,
+      rentalId: options?.rentalId ?? null,
+      latencyMs: result.latencyMs,
+      failures: result.failures,
+    });
+  }
 }

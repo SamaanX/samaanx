@@ -14,19 +14,57 @@ export type BroadcastResult = {
   failures: string[];
 };
 
+type BroadcastContext = {
+  userIds?: string[];
+  rentalId?: string | null;
+};
+
 /**
  * Push events to Supabase Realtime via HTTP per-event broadcast API.
  * Uses POST /realtime/v1/api/broadcast/{topic}/events/{event}
  */
 export async function postSupabaseBroadcast(
   messages: BroadcastMessage[],
+  context?: BroadcastContext,
 ): Promise<BroadcastResult> {
   if (messages.length === 0) {
     return { ok: true, latencyMs: 0, failures: [] };
   }
 
-  const serviceKey = getSupabaseServiceRoleKey();
+  const userIds =
+    context?.userIds ??
+    (messages
+      .map((m) => {
+        const match = /^live-sync:(.+)$/.exec(m.topic);
+        return match?.[1] ?? null;
+      })
+      .filter(Boolean) as string[]);
+
+  let serviceKey: string | null;
+  try {
+    serviceKey = getSupabaseServiceRoleKey();
+  } catch (error) {
+    logger.error("postSupabaseBroadcast aborted", {
+      reason: "service_role_key_error",
+      userIds,
+      rentalId: context?.rentalId ?? null,
+      topics: messages.map((m) => m.topic),
+      message: error instanceof Error ? error.message : "unknown",
+    });
+    return {
+      ok: false,
+      latencyMs: 0,
+      failures: ["service_role_key_error"],
+    };
+  }
+
   if (!serviceKey) {
+    logger.error("postSupabaseBroadcast skipped", {
+      reason: "missing_service_role_key",
+      userIds,
+      rentalId: context?.rentalId ?? null,
+      topics: messages.map((m) => m.topic),
+    });
     return { ok: false, latencyMs: 0, failures: ["missing_service_role_key"] };
   }
 
@@ -71,13 +109,10 @@ export async function postSupabaseBroadcast(
 
   if (!ok) {
     logger.error("postSupabaseBroadcast failed", {
+      userIds,
+      rentalId: context?.rentalId ?? null,
       latencyMs,
       failures,
-      topics: messages.map((m) => m.topic),
-    });
-  } else if (process.env.PERF_CHAT === "1") {
-    logger.info("postSupabaseBroadcast ok", {
-      latencyMs,
       topics: messages.map((m) => m.topic),
     });
   }

@@ -1,4 +1,4 @@
-import type { Prisma, VerificationStage } from "@prisma/client";
+import { Prisma, type VerificationStage } from "@prisma/client";
 
 import { getServerEnv } from "@/config/env";
 import {
@@ -10,6 +10,7 @@ import {
   requireHmacSecret,
 } from "@/domain/verification";
 import { buildInAppNotificationData } from "@/features/rentals/services/notifications";
+import { verificationConflict } from "@/features/verification/services/errors";
 
 type Tx = Prisma.TransactionClient;
 
@@ -28,6 +29,11 @@ export async function createStageVerification(params: {
   pin: string;
   expiresAt: Date;
 }> {
+  // Serialize concurrent regenerate/create for the same rental.
+  await params.tx.$executeRaw`
+    SELECT id FROM rentals WHERE id = ${params.rentalId}::uuid FOR UPDATE
+  `;
+
   const secret = requireHmacSecret(getServerEnv().VERIFICATION_HMAC_SECRET);
   const verificationId = newVerificationId();
   const generatedAt = new Date();
@@ -50,21 +56,33 @@ export async function createStageVerification(params: {
     data: { isCurrent: false },
   });
 
-  await params.tx.rentalVerification.create({
-    data: {
-      id: verificationId,
-      rentalId: params.rentalId,
-      stage: params.stage,
-      qrPayload,
-      qrHash,
-      pinHash,
-      generatedAt,
-      expiresAt,
-      failedAttempts: 0,
-      lockedUntil: null,
-      isCurrent: true,
-    },
-  });
+  try {
+    await params.tx.rentalVerification.create({
+      data: {
+        id: verificationId,
+        rentalId: params.rentalId,
+        stage: params.stage,
+        qrPayload,
+        qrHash,
+        pinHash,
+        generatedAt,
+        expiresAt,
+        failedAttempts: 0,
+        lockedUntil: null,
+        isCurrent: true,
+      },
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw verificationConflict(
+        "Verification codes are being regenerated. Please try again.",
+      );
+    }
+    throw error;
+  }
 
   await params.tx.rentalConfirmation.upsert({
     where: {

@@ -112,8 +112,8 @@ export default async function ListingDetailPage({
 
     const listing = { ...listingBase, isWishlisted };
 
-    after(() => {
-      void incrementListingViewCount(listing.id);
+    after(async () => {
+      await incrementListingViewCount(listing.id);
     });
 
     const isOwner = profile?.id === listing.sellerId;

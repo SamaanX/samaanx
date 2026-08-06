@@ -482,8 +482,11 @@ export async function verifyQrAction(
         where: { id: rentalId },
       });
 
-      await tx.rentalVerification.update({
-        where: { id: verification.id },
+      const markVerified = await tx.rentalVerification.updateMany({
+        where: {
+          id: verification.id,
+          verifiedAt: null,
+        },
         data: {
           verifiedAt: new Date(),
           verifiedById: profile.id,
@@ -492,6 +495,10 @@ export async function verifyQrAction(
           lockedUntil: null,
         },
       });
+
+      if (markVerified.count === 0) {
+        throw verificationConflict("Already verified.");
+      }
 
       if (stage === "HANDOVER" && rental.status === "APPROVED") {
         await tx.rental.update({
@@ -584,8 +591,11 @@ export async function verifyPinAction(
         where: { id: rentalId },
       });
 
-      await tx.rentalVerification.update({
-        where: { id: verification.id },
+      const markVerified = await tx.rentalVerification.updateMany({
+        where: {
+          id: verification.id,
+          verifiedAt: null,
+        },
         data: {
           verifiedAt: new Date(),
           verifiedById: profile.id,
@@ -594,6 +604,10 @@ export async function verifyPinAction(
           lockedUntil: null,
         },
       });
+
+      if (markVerified.count === 0) {
+        throw verificationConflict("Already verified.");
+      }
 
       if (stage === "HANDOVER" && rental.status === "APPROVED") {
         await tx.rental.update({
