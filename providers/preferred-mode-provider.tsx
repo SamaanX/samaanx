@@ -24,10 +24,6 @@ export function PreferredModeProvider({
 }: PreferredModeProviderProps) {
   const [mode, setMode] = React.useState(initialMode);
 
-  React.useEffect(() => {
-    setMode(initialMode);
-  }, [initialMode]);
-
   const value = React.useMemo(() => ({ mode, setMode }), [mode]);
 
   return (

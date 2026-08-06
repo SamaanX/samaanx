@@ -4,6 +4,9 @@ export const CHAT_MEDIA_BUCKET = "chat-media";
 export const CHAT_MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 export const CHAT_MESSAGES_PAGE_SIZE = 40;
 
+/** Sender may revoke a message for all parties within this window. */
+export const CHAT_DELETE_FOR_EVERYONE_MS = 15 * 60 * 1000;
+
 export const CHAT_IMAGE_MIMES = [
   "image/jpeg",
   "image/png",
@@ -43,6 +46,10 @@ export const sendTextMessageSchema = z.object({
 });
 
 export const hideMessageSchema = z.object({
+  messageId: z.string().uuid(),
+});
+
+export const deleteForEveryoneSchema = z.object({
   messageId: z.string().uuid(),
 });
 

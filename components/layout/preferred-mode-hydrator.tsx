@@ -9,7 +9,7 @@ import { usePreferredMode } from "@/providers/preferred-mode-provider";
 export function PreferredModeHydrator({ mode }: { mode: AppUiMode }) {
   const { setMode } = usePreferredMode();
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     setMode(mode);
   }, [mode, setMode]);
 

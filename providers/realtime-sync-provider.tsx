@@ -7,6 +7,7 @@ import { bumpLiveSurfaces } from "@/features/realtime/live-sync";
 import { queryKeys } from "@/lib/query-keys";
 import { createClient } from "@/lib/supabase/client";
 import { ChatRealtimeHost } from "@/providers/chat-realtime-host";
+import { PresenceHost } from "@/providers/presence-host";
 
 export const REALTIME_RENTAL_EVENT = "samaanx:rental-sync";
 
@@ -169,8 +170,10 @@ export function RealtimeSyncProvider({
 
   return (
     <>
-      <ChatRealtimeHost userId={userId} />
-      {children}
+      <PresenceHost userId={userId}>
+        <ChatRealtimeHost userId={userId} />
+        {children}
+      </PresenceHost>
     </>
   );
 }

@@ -253,6 +253,7 @@ model Profile {
   rentalsCancelled         Rental[]                 @relation("RentalCancelledBy")
   verificationsPerformed   RentalVerification[]     @relation("VerificationVerifiedBy")
   messagesSent             Message[]                @relation("MessageSender")
+  messagesDeleted          Message[]                @relation("MessageDeletedBy")
   messageHides             MessageHide[]
   reviewsWritten           Review[]                 @relation("ReviewReviewer")
   reviewsReceived          Review[]                 @relation("ReviewReviewee")
@@ -520,10 +521,13 @@ model Message {
   attachmentSize   Int?                   @map("attachment_size")
   deliveredAt      DateTime?              @map("delivered_at") @db.Timestamptz(6)
   readAt           DateTime?              @map("read_at") @db.Timestamptz(6)
+  deletedForEveryoneAt DateTime?          @map("deleted_for_everyone_at") @db.Timestamptz(6)
+  deletedById      String?                @map("deleted_by_id") @db.Uuid
   createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
 
   conversation     Conversation           @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender           Profile                @relation("MessageSender", fields: [senderId], references: [id], onDelete: Restrict)
+  deletedBy        Profile?               @relation("MessageDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   replyTo          Message?               @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies          Message[]              @relation("MessageReplies")
   hides            MessageHide[]

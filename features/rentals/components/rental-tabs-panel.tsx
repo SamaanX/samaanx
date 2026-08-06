@@ -67,7 +67,7 @@ export function RentalTabsPanel({
     initialDataUpdatedAt: Date.now(),
     staleTime: 30_000,
     refetchOnMount: false,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchInterval: false,
   });
 

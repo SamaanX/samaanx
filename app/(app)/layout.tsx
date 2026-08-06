@@ -5,6 +5,7 @@ import {
   RealtimeUserBridge,
   RealtimeUserHydrator,
 } from "@/components/layout/realtime-user-bridge";
+import { SellerRouteModeSync } from "@/components/layout/seller-route-mode-sync";
 import { SiteHeader } from "@/components/layout/site-header";
 import { CriticalActivitySlot } from "@/features/activity/components/critical-activity-slot";
 import { isAdminRole } from "@/features/admin/services/permissions";
@@ -30,6 +31,7 @@ export default async function AppLayout({
   return (
     <PreferredModeProvider initialMode="BUYER">
       <RealtimeUserBridge initialUserId={initialUserId}>
+        <SellerRouteModeSync />
         <div className="bg-background relative min-h-dvh">
           <div
             aria-hidden

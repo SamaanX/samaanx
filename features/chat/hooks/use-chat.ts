@@ -9,6 +9,7 @@ import {
 import * as React from "react";
 
 import {
+  deleteChatMessageForEveryoneAction,
   getChatInboxAction,
   getChatThreadAction,
   getChatUnreadTotalAction,
@@ -18,14 +19,16 @@ import {
   markChatMessagesReadAction,
   sendChatAttachmentAction,
   sendChatTextMessageAction,
-  touchLastSeenAction,
 } from "@/features/chat/actions/chat-actions";
 import {
   bumpChatUnreadTotal,
   patchAppendMessage,
+  patchHeaderPeerLastSeen,
   patchInboxPreview,
   patchIncomingMessageTimestamps,
+  patchMessageDeletedForEveryone,
   patchMessageReceipts,
+  patchRemoveMessage,
   patchReplaceOptimistic,
   syncChatUnreadTotal,
 } from "@/features/chat/lib/chat-cache";
@@ -40,6 +43,12 @@ import type {
 } from "@/features/chat/types/chat";
 import { queryKeys } from "@/lib/query-keys";
 import { createClient } from "@/lib/supabase/client";
+import {
+  usePresenceOnline,
+  usePresenceOnlineIds,
+} from "@/providers/presence-host";
+
+export { usePresenceOnline, usePresenceOnlineIds };
 
 type ReceiptPayload = {
   type: "delivered" | "seen";
@@ -53,6 +62,30 @@ type MessagePayload = {
   message: ChatMessageView;
   senderName?: string;
 };
+
+type DeletePayload = {
+  messageId: string;
+  conversationId: string;
+  scope: "me" | "everyone";
+  byUserId: string;
+};
+
+function applyDelete(
+  queryClient: ReturnType<typeof useQueryClient>,
+  viewerId: string,
+  payload: DeletePayload,
+) {
+  if (payload.scope === "everyone") {
+    patchMessageDeletedForEveryone(
+      queryClient,
+      payload.conversationId,
+      payload.messageId,
+    );
+    return;
+  }
+  if (payload.byUserId !== viewerId) return;
+  patchRemoveMessage(queryClient, payload.conversationId, payload.messageId);
+}
 
 async function sendBroadcast(
   channel: RealtimeChannel | null,
@@ -123,7 +156,23 @@ function applyIncomingMessage(
   queryClient: ReturnType<typeof useQueryClient>,
   viewerId: string,
   message: ChatMessageView,
+  source: "broadcast" | "postgres" = "broadcast",
 ) {
+  if (
+    process.env.NODE_ENV === "development" ||
+    process.env.NEXT_PUBLIC_PERF_CHAT === "1"
+  ) {
+    console.warn(
+      JSON.stringify({
+        level: "debug",
+        message: "chat.receive",
+        source,
+        messageId: message.id,
+        at: new Date().toISOString(),
+      }),
+    );
+  }
+
   const view = toLiveMessageView(message, viewerId);
   const conversationId = view.conversationId;
   const hadInbox = Boolean(queryClient.getQueryData(queryKeys.chat.inbox()));
@@ -295,6 +344,12 @@ export function useChatUserRealtime(
       applyReceipt(queryClient, userId, receipt);
     });
 
+    channel.on("broadcast", { event: "delete" }, ({ payload }) => {
+      const del = payload as DeletePayload | undefined;
+      if (!del?.messageId || !del.conversationId) return;
+      applyDelete(queryClient, userId, del);
+    });
+
     channel.on(
       "postgres_changes",
       { event: "*", schema: "public", table: "conversations" },
@@ -319,7 +374,7 @@ export function useChatUserRealtime(
         const message = chatMessageViewFromPostgresRow(row, userId);
         if (!message || message.senderId === userId) return;
 
-        applyIncomingMessage(queryClient, userId, message);
+        applyIncomingMessage(queryClient, userId, message, "postgres");
       },
     );
 
@@ -362,6 +417,17 @@ export function useChatThread(params: {
   });
 
   const livePeerId = headerQuery.data?.peer.id ?? peerId;
+  const peerOnline = usePresenceOnline(livePeerId);
+
+  React.useEffect(() => {
+    if (peerOnline || !livePeerId || !conversationId) return;
+    void headerQuery.refetch().then((result) => {
+      const lastSeen = result.data?.peer.lastSeenAt;
+      if (lastSeen) {
+        patchHeaderPeerLastSeen(queryClient, conversationId, lastSeen);
+      }
+    });
+  }, [peerOnline, livePeerId, conversationId, headerQuery, queryClient]);
 
   React.useEffect(() => {
     if (!livePeerId) return;
@@ -452,6 +518,15 @@ export function useChatThread(params: {
       });
     });
 
+    channel.on("broadcast", { event: "delete" }, ({ payload }) => {
+      const del = payload as DeletePayload | undefined;
+      if (!del?.messageId) return;
+      applyDelete(queryClient, userId, {
+        ...del,
+        conversationId: del.conversationId || conversationId,
+      });
+    });
+
     channel.on(
       "postgres_changes",
       {
@@ -465,7 +540,12 @@ export function useChatThread(params: {
         const message = chatMessageViewFromPostgresRow(row, userId);
         if (!message) return;
 
-        const view = applyIncomingMessage(queryClient, userId, message);
+        const view = applyIncomingMessage(
+          queryClient,
+          userId,
+          message,
+          "postgres",
+        );
         if (view.isMine) return;
 
         void ackDeliveredAndNotify({
@@ -573,21 +653,6 @@ export function useChatThread(params: {
     void markChatMessagesReadAction({ conversationId });
   }, [conversationId, unreadKey, queryClient, userId, messages]);
 
-  React.useEffect(() => {
-    void touchLastSeenAction();
-    const id = window.setInterval(() => {
-      void touchLastSeenAction();
-    }, 60_000);
-    const onHide = () => {
-      void touchLastSeenAction();
-    };
-    document.addEventListener("visibilitychange", onHide);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onHide);
-    };
-  }, []);
-
   async function fanoutMessage(confirmed: ChatMessageView) {
     const payload: MessagePayload = {
       message: confirmed,
@@ -623,6 +688,11 @@ export function useChatThread(params: {
       clearUnread: true,
     });
 
+    const clickAt = Date.now();
+    if (typeof performance !== "undefined") {
+      performance.mark("chat-send-click");
+    }
+
     const result = await sendChatTextMessageAction({
       conversationId,
       body,
@@ -646,6 +716,30 @@ export function useChatThread(params: {
     patchInboxPreview(queryClient, conversationId, confirmed, {
       clearUnread: true,
     });
+
+    if (typeof performance !== "undefined") {
+      performance.mark("chat-send-response");
+      performance.measure(
+        "chat-send-action-ms",
+        "chat-send-click",
+        "chat-send-response",
+      );
+    }
+
+    if (
+      process.env.NODE_ENV === "development" ||
+      process.env.NEXT_PUBLIC_PERF_CHAT === "1"
+    ) {
+      console.warn(
+        JSON.stringify({
+          level: "debug",
+          message: "chat.send.client",
+          actionMs: Date.now() - clickAt,
+          at: new Date().toISOString(),
+        }),
+      );
+    }
+
     void fanoutMessage(confirmed);
 
     return { ok: true as const, data: confirmed };
@@ -680,8 +774,32 @@ export function useChatThread(params: {
   }
 
   async function hideMessage(messageId: string) {
+    if (!conversationId) {
+      return {
+        ok: false as const,
+        error: { message: "No conversation", code: "INTERNAL" as const },
+      };
+    }
+    patchRemoveMessage(queryClient, conversationId, messageId);
     const result = await hideChatMessageAction({ messageId });
-    if (result.ok && conversationId) {
+    if (!result.ok) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.chat.messages(conversationId),
+      });
+    }
+    return result;
+  }
+
+  async function deleteForEveryone(messageId: string) {
+    if (!conversationId) {
+      return {
+        ok: false as const,
+        error: { message: "No conversation", code: "INTERNAL" as const },
+      };
+    }
+    patchMessageDeletedForEveryone(queryClient, conversationId, messageId);
+    const result = await deleteChatMessageForEveryoneAction({ messageId });
+    if (!result.ok) {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.chat.messages(conversationId),
       });
@@ -696,6 +814,8 @@ export function useChatThread(params: {
     sendText,
     sendAttachment,
     hideMessage,
+    deleteForEveryone,
+    peerOnline,
   };
 }
 
@@ -748,55 +868,4 @@ export function useChatTyping(params: {
   }, [params.displayName, params.userId]);
 
   return { peerTypingName, notifyTyping };
-}
-
-export function useChatPresence(userId: string, peerId?: string | null) {
-  const [onlineIds, setOnlineIds] = React.useState<Set<string>>(
-    () => new Set(),
-  );
-
-  React.useEffect(() => {
-    if (!userId) return;
-
-    const supabase = createClient();
-    const channel = supabase.channel("samaanx-presence", {
-      config: { presence: { key: userId } },
-    });
-
-    const applySync = () => {
-      const state = channel.presenceState<{ userId?: string }>();
-      const next = new Set<string>();
-      for (const metas of Object.values(state)) {
-        for (const meta of metas) {
-          if (meta.userId) next.add(meta.userId);
-        }
-      }
-      next.add(userId);
-      setOnlineIds(next);
-    };
-
-    channel.on("presence", { event: "sync" }, applySync);
-    channel.on("presence", { event: "join" }, applySync);
-    channel.on("presence", { event: "leave" }, applySync);
-
-    channel.subscribe(async (status) => {
-      if (status === "SUBSCRIBED") {
-        await channel.track({
-          userId,
-          online_at: new Date().toISOString(),
-        });
-        void touchLastSeenAction();
-        applySync();
-      }
-    });
-
-    return () => {
-      void channel.untrack();
-      void supabase.removeChannel(channel);
-      void touchLastSeenAction();
-    };
-  }, [userId]);
-
-  const isOnline = peerId ? onlineIds.has(peerId) : false;
-  return { isOnline, onlineIds };
 }

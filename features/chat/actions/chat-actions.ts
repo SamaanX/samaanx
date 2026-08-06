@@ -1,11 +1,16 @@
 "use server";
 
+import type { MessageAttachmentKind } from "@prisma/client";
+import { after } from "next/server";
+
 import {
   getConversationThreadHeader,
   listConversationsForUser,
   listMessagesPage,
 } from "@/features/chat/queries/conversations";
 import {
+  CHAT_DELETE_FOR_EVERYONE_MS,
+  deleteForEveryoneSchema,
   hideMessageSchema,
   listMessagesSchema,
   markMessagesDeliveredSchema,
@@ -16,7 +21,10 @@ import {
   chatReadonlyError,
   toChatActionError,
 } from "@/features/chat/services/chat-errors";
-import { broadcastChatMessage } from "@/features/chat/services/chat-realtime-server";
+import {
+  scheduleChatDeleteBroadcast,
+  scheduleChatMessageBroadcast,
+} from "@/features/chat/services/chat-realtime-server";
 import { uploadChatAttachment } from "@/features/chat/services/chat-storage";
 import {
   previewFromMessage,
@@ -66,6 +74,63 @@ async function assertParticipant(conversationId: string, userId: string) {
     });
   }
   return conversation;
+}
+
+function scheduleChatMessageNotification(params: {
+  peerId: string;
+  senderDisplayName: string;
+  messageBody: string;
+  attachmentKind: MessageAttachmentKind | null;
+  attachmentName: string | null;
+  rentalId: string;
+  listingId: string;
+  listingTitle: string;
+  conversationId: string;
+  messageId: string;
+}) {
+  after(async () => {
+    try {
+      await prisma.notification.create({
+        data: buildInAppNotificationData({
+          userId: params.peerId,
+          type: "NEW_MESSAGE",
+          title: "New message",
+          body: `${params.senderDisplayName}: ${previewFromMessage({
+            body: params.messageBody,
+            attachmentKind: params.attachmentKind,
+            attachmentName: params.attachmentName,
+          })}`,
+          rentalId: params.rentalId,
+          listingId: params.listingId,
+          payload: {
+            conversationId: params.conversationId,
+            messageId: params.messageId,
+            listingTitle: params.listingTitle,
+          },
+        }),
+      });
+
+      scheduleChannelDelivery([
+        notifyParamsToDeliveryEvent({
+          userId: params.peerId,
+          type: "NEW_MESSAGE",
+          title: "New message",
+          body: `${params.senderDisplayName}: ${previewFromMessage({
+            body: params.messageBody,
+            attachmentKind: params.attachmentKind,
+            attachmentName: params.attachmentName,
+          })}`,
+          rentalId: params.rentalId,
+          listingId: params.listingId,
+          payload: { conversationId: params.conversationId },
+        }),
+      ]);
+    } catch (error) {
+      logger.error("scheduleChatMessageNotification failed", {
+        message: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  });
 }
 
 export async function getChatInboxAction(): Promise<
@@ -207,6 +272,8 @@ export async function sendChatTextMessageAction(
       }
     }
 
+    const actionStarted = Date.now();
+
     const created = await prisma.$transaction(async (tx) => {
       const message = await tx.message.create({
         data: {
@@ -241,53 +308,41 @@ export async function sendChatTextMessageAction(
           ? conversation.sellerId
           : conversation.buyerId;
 
-      await tx.notification.create({
-        data: buildInAppNotificationData({
-          userId: peerId,
-          type: "NEW_MESSAGE",
-          title: "New message",
-          body: `${profile.displayName}: ${previewFromMessage({
-            body: message.body,
-            attachmentKind: null,
-            attachmentName: null,
-          })}`,
-          rentalId: conversation.rentalId,
-          listingId: conversation.rental.listingId,
-          payload: {
-            conversationId: conversation.id,
-            messageId: message.id,
-            listingTitle: conversation.rental.listing.title,
-          },
-        }),
-      });
-
       return { message, peerId };
     });
 
-    scheduleChannelDelivery([
-      notifyParamsToDeliveryEvent({
-        userId: created.peerId,
-        type: "NEW_MESSAGE",
-        title: "New message",
-        body: `${profile.displayName}: ${previewFromMessage({
-          body: created.message.body,
-          attachmentKind: null,
-          attachmentName: null,
-        })}`,
-        rentalId: conversation.rentalId,
-        listingId: conversation.rental.listingId,
-        payload: { conversationId: conversation.id },
-      }),
-    ]);
+    const dbCommitMs = Date.now() - actionStarted;
+
+    scheduleChatMessageNotification({
+      peerId: created.peerId,
+      senderDisplayName: profile.displayName,
+      messageBody: created.message.body,
+      attachmentKind: null,
+      attachmentName: null,
+      rentalId: conversation.rentalId,
+      listingId: conversation.rental.listingId,
+      listingTitle: conversation.rental.listing.title,
+      conversationId: conversation.id,
+      messageId: created.message.id,
+    });
 
     const view = toChatMessageView(created.message, profile.id);
 
-    await broadcastChatMessage({
+    scheduleChatMessageBroadcast({
       peerId: created.peerId,
       conversationId: conversation.id,
       message: view,
       senderName: profile.displayName,
     });
+
+    if (process.env.PERF_CHAT === "1") {
+      logger.info("chat.send.timing", {
+        conversationId: conversation.id,
+        messageId: created.message.id,
+        dbCommitMs,
+        totalMs: Date.now() - actionStarted,
+      });
+    }
 
     return {
       ok: true,
@@ -331,6 +386,8 @@ export async function sendChatAttachmentAction(
       file,
     });
 
+    const actionStarted = Date.now();
+
     const created = await prisma.$transaction(async (tx) => {
       const message = await tx.message.create({
         data: {
@@ -371,52 +428,39 @@ export async function sendChatAttachmentAction(
           ? conversation.sellerId
           : conversation.buyerId;
 
-      await tx.notification.create({
-        data: buildInAppNotificationData({
-          userId: peerId,
-          type: "NEW_MESSAGE",
-          title: "New message",
-          body: `${profile.displayName}: ${previewFromMessage({
-            body: message.body,
-            attachmentKind: message.attachmentKind,
-            attachmentName: message.attachmentName,
-          })}`,
-          rentalId: conversation.rentalId,
-          listingId: conversation.rental.listingId,
-          payload: {
-            conversationId,
-            messageId: message.id,
-          },
-        }),
-      });
-
       return { message, peerId };
     });
 
-    scheduleChannelDelivery([
-      notifyParamsToDeliveryEvent({
-        userId: created.peerId,
-        type: "NEW_MESSAGE",
-        title: "New message",
-        body: `${profile.displayName}: ${previewFromMessage({
-          body: created.message.body,
-          attachmentKind: created.message.attachmentKind,
-          attachmentName: created.message.attachmentName,
-        })}`,
-        rentalId: conversation.rentalId,
-        listingId: conversation.rental.listingId,
-        payload: { conversationId },
-      }),
-    ]);
+    scheduleChatMessageNotification({
+      peerId: created.peerId,
+      senderDisplayName: profile.displayName,
+      messageBody: created.message.body,
+      attachmentKind: created.message.attachmentKind,
+      attachmentName: created.message.attachmentName,
+      rentalId: conversation.rentalId,
+      listingId: conversation.rental.listingId,
+      listingTitle: conversation.rental.listing.title,
+      conversationId,
+      messageId: created.message.id,
+    });
 
     const view = toChatMessageView(created.message, profile.id);
 
-    await broadcastChatMessage({
+    scheduleChatMessageBroadcast({
       peerId: created.peerId,
       conversationId,
       message: view,
       senderName: profile.displayName,
     });
+
+    if (process.env.PERF_CHAT === "1") {
+      logger.info("chat.sendAttachment.timing", {
+        conversationId,
+        messageId: created.message.id,
+        dbCommitMs: Date.now() - actionStarted,
+        totalMs: Date.now() - actionStarted,
+      });
+    }
 
     return {
       ok: true,
@@ -445,7 +489,11 @@ export async function hideChatMessageAction(
 
     const message = await prisma.message.findFirst({
       where: { id: parsed.data.messageId },
-      select: { id: true, conversationId: true },
+      select: {
+        id: true,
+        conversationId: true,
+        conversation: { select: { buyerId: true, sellerId: true } },
+      },
     });
     if (!message) {
       return {
@@ -464,6 +512,97 @@ export async function hideChatMessageAction(
       },
       create: { messageId: message.id, userId: profile.id },
       update: {},
+    });
+
+    scheduleChatDeleteBroadcast({
+      conversationId: message.conversationId,
+      messageId: message.id,
+      scope: "me",
+      byUserId: profile.id,
+    });
+
+    return { ok: true, data: { messageId: message.id } };
+  } catch (error) {
+    return { ok: false, error: toChatActionError(error) };
+  }
+}
+
+export async function deleteChatMessageForEveryoneAction(
+  input: unknown,
+): Promise<ChatActionResult<{ messageId: string }>> {
+  try {
+    const { profile } = await requireUser();
+    const parsed = deleteForEveryoneSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: { code: "VALIDATION", message: "Invalid message." },
+      };
+    }
+
+    const message = await prisma.message.findFirst({
+      where: { id: parsed.data.messageId },
+      select: {
+        id: true,
+        conversationId: true,
+        senderId: true,
+        createdAt: true,
+        deletedForEveryoneAt: true,
+        conversation: { select: { buyerId: true, sellerId: true } },
+      },
+    });
+    if (!message) {
+      return {
+        ok: false,
+        error: { code: "NOT_FOUND", message: "Message not found." },
+      };
+    }
+    if (message.senderId !== profile.id) {
+      return {
+        ok: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Only the sender can delete for everyone.",
+        },
+      };
+    }
+    if (message.deletedForEveryoneAt) {
+      return { ok: true, data: { messageId: message.id } };
+    }
+
+    const ageMs = Date.now() - message.createdAt.getTime();
+    if (ageMs > CHAT_DELETE_FOR_EVERYONE_MS) {
+      return {
+        ok: false,
+        error: {
+          code: "FORBIDDEN",
+          message: "Delete window has expired.",
+        },
+      };
+    }
+
+    await assertParticipant(message.conversationId, profile.id);
+
+    const now = new Date();
+    await prisma.message.update({
+      where: { id: message.id },
+      data: {
+        deletedForEveryoneAt: now,
+        deletedById: profile.id,
+      },
+    });
+
+    const peerId =
+      message.conversation.buyerId === profile.id
+        ? message.conversation.sellerId
+        : message.conversation.buyerId;
+
+    scheduleChatDeleteBroadcast({
+      peerId,
+      conversationId: message.conversationId,
+      messageId: message.id,
+      scope: "everyone",
+      byUserId: profile.id,
     });
 
     return { ok: true, data: { messageId: message.id } };

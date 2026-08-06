@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 type ConversationListProps = {
   items: ChatConversationListItem[];
   activeId: string | null;
-  onlineIds: Set<string>;
+  onlineIds: ReadonlySet<string>;
   className?: string;
 };
 

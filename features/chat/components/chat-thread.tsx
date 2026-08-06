@@ -30,7 +30,6 @@ type ChatThreadProps = {
   userId: string;
   myName: string;
   role: "buyer" | "seller";
-  isOnline: boolean;
   initialHeader: ChatThreadHeader;
   initialPage: ChatMessagesPage;
   showBack?: boolean;
@@ -59,7 +58,6 @@ export function ChatThread({
   userId,
   myName,
   role,
-  isOnline,
   initialHeader,
   initialPage,
   showBack = true,
@@ -76,6 +74,8 @@ export function ChatThread({
     sendText,
     sendAttachment,
     hideMessage,
+    deleteForEveryone,
+    peerOnline,
   } = useChatThread({
     conversationId,
     userId,
@@ -139,7 +139,7 @@ export function ChatThread({
     return () => el.removeEventListener("scroll", onScroll);
   }, [messagesQuery]);
 
-  const presenceLabel = isOnline
+  const presenceLabel = peerOnline
     ? "Online"
     : formatLastSeen(liveHeader.peer.lastSeenAt);
   const initials = liveHeader.peer.displayName
@@ -177,7 +177,7 @@ export function ChatThread({
           <p
             className={cn(
               "truncate text-xs",
-              isOnline ? "text-brand-green" : "text-muted-foreground",
+              peerOnline ? "text-brand-green" : "text-muted-foreground",
             )}
           >
             {peerTypingName ? `${peerTypingName} is typing...` : presenceLabel}
@@ -269,6 +269,7 @@ export function ChatThread({
                     message={row.message}
                     onReply={setReplyTo}
                     onHide={(id) => void hideMessage(id)}
+                    onDeleteForEveryone={(id) => void deleteForEveryone(id)}
                   />
                 )}
               </div>

@@ -2,7 +2,10 @@
 
 import { ChatThread } from "@/features/chat/components/chat-thread";
 import { ConversationList } from "@/features/chat/components/conversation-list";
-import { useChatInbox, useChatPresence } from "@/features/chat/hooks/use-chat";
+import {
+  useChatInbox,
+  usePresenceOnlineIds,
+} from "@/features/chat/hooks/use-chat";
 import type {
   ChatConversationListItem,
   ChatMessagesPage,
@@ -31,12 +34,7 @@ export function ChatWorkspace({
 }: ChatWorkspaceProps) {
   const inbox = useChatInbox(initialInbox);
   const items = inbox.data ?? initialInbox;
-  const peerId =
-    initialHeader?.peer.id ??
-    items.find((c) => c.id === activeId)?.peer.id ??
-    null;
-  const { onlineIds } = useChatPresence(userId, peerId);
-  const peerOnline = peerId ? onlineIds.has(peerId) : false;
+  const onlineIds = usePresenceOnlineIds();
 
   const hasThread = Boolean(activeId && initialHeader && initialPage);
 
@@ -68,7 +66,6 @@ export function ChatWorkspace({
             userId={userId}
             myName={myName}
             role={viewerRole}
-            isOnline={peerOnline}
             initialHeader={initialHeader}
             initialPage={initialPage}
             showBack

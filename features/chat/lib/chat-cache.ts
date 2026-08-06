@@ -6,6 +6,7 @@ import type {
   ChatConversationListItem,
   ChatMessagesPage,
   ChatMessageView,
+  ChatThreadHeader,
 } from "@/features/chat/types/chat";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -214,5 +215,72 @@ export function syncChatUnreadTotal(queryClient: QueryClient): void {
 export function bumpChatUnreadTotal(queryClient: QueryClient, delta = 1): void {
   queryClient.setQueryData<number>(queryKeys.chat.unreadTotal(), (prev) =>
     Math.max(0, (prev ?? 0) + delta),
+  );
+}
+
+export function patchRemoveMessage(
+  queryClient: QueryClient,
+  conversationId: string,
+  messageId: string,
+): void {
+  queryClient.setQueryData<MessagesInfinite>(
+    queryKeys.chat.messages(conversationId),
+    (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        pages: prev.pages.map((page) => ({
+          ...page,
+          messages: page.messages.filter((m) => m.id !== messageId),
+        })),
+      };
+    },
+  );
+}
+
+export function patchMessageDeletedForEveryone(
+  queryClient: QueryClient,
+  conversationId: string,
+  messageId: string,
+): void {
+  queryClient.setQueryData<MessagesInfinite>(
+    queryKeys.chat.messages(conversationId),
+    (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        pages: prev.pages.map((page) => ({
+          ...page,
+          messages: page.messages.map((m) =>
+            m.id === messageId
+              ? {
+                  ...m,
+                  body: "",
+                  attachment: null,
+                  replyTo: null,
+                  deletedForEveryone: true,
+                }
+              : m,
+          ),
+        })),
+      };
+    },
+  );
+}
+
+export function patchHeaderPeerLastSeen(
+  queryClient: QueryClient,
+  conversationId: string,
+  lastSeenAt: string,
+): void {
+  queryClient.setQueryData<ChatThreadHeader>(
+    [...queryKeys.chat.thread(conversationId), "header"],
+    (prev) =>
+      prev
+        ? {
+            ...prev,
+            peer: { ...prev.peer, lastSeenAt },
+          }
+        : prev,
   );
 }

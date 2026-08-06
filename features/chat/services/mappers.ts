@@ -41,7 +41,13 @@ export function toChatMessageView(
   viewerId: string,
 ): ChatMessageView {
   const isMine = row.senderId === viewerId;
+  const deletedForEveryone = Boolean(
+    (row as Message & { deletedForEveryoneAt?: Date | null })
+      .deletedForEveryoneAt,
+  );
+
   const attachment =
+    !deletedForEveryone &&
     row.attachmentKind &&
     row.attachmentPath &&
     row.attachmentUrl &&
@@ -59,7 +65,7 @@ export function toChatMessageView(
       : null;
 
   let replyTo: ChatReplyPreview | null = null;
-  if (row.replyTo) {
+  if (row.replyTo && !deletedForEveryone) {
     replyTo = {
       id: row.replyTo.id,
       body: row.replyTo.body,
@@ -72,7 +78,7 @@ export function toChatMessageView(
     id: row.id,
     conversationId: row.conversationId,
     senderId: row.senderId,
-    body: row.body,
+    body: deletedForEveryone ? "" : row.body,
     createdAt: row.createdAt.toISOString(),
     deliveredAt: row.deliveredAt?.toISOString() ?? null,
     readAt: row.readAt?.toISOString() ?? null,
@@ -84,6 +90,7 @@ export function toChatMessageView(
     isMine,
     attachment,
     replyTo,
+    deletedForEveryone,
   };
 }
 

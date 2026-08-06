@@ -61,6 +61,8 @@ export type ChatMessageView = {
   replyTo: ChatReplyPreview | null;
   /** Client-only optimistic flag */
   optimistic?: boolean;
+  /** Soft-deleted for all participants */
+  deletedForEveryone?: boolean;
 };
 
 export type ChatConversationListItem = {
