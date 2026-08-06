@@ -16,6 +16,7 @@ import {
 import { HomeModeShell } from "@/features/search/components/home-mode-shell";
 import { SellerHome } from "@/features/search/components/seller-home";
 import { getCurrentProfile } from "@/lib/auth/guards";
+import { logRequestSummary } from "@/lib/perf/request-summary";
 import { JsonLd, organizationSchema, websiteSchema } from "@/lib/seo/json-ld";
 
 export const metadata = {
@@ -79,6 +80,7 @@ export default function HomePage() {
 
 async function HomeHeroAuthed() {
   const profile = await getCurrentProfile();
+  logRequestSummary("page.home");
   return <HomeHero mode="BUYER" isAuthenticated={Boolean(profile)} />;
 }
 

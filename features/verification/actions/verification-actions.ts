@@ -9,7 +9,6 @@ import {
   verifyQrPayload,
 } from "@/domain/verification";
 import { scheduleVerificationReadyDelivery } from "@/features/notifications/services/dispatch";
-import { wakeUsersLiveSync } from "@/features/realtime/server-live-sync";
 import { buildInAppNotificationData } from "@/features/rentals/services/notifications";
 import { getVerificationStatusView } from "@/features/verification/queries/status";
 import {
@@ -37,15 +36,16 @@ import type {
 import { requireUser } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
+import { scheduleLiveSyncAfterResponse } from "@/lib/realtime/schedule-live-sync";
 
 /** Live UI syncs via Realtime + client cache — no revalidatePath. */
 
-async function wakeRentalParties(
+function wakeRentalParties(
   buyerId: string,
   sellerId: string,
   rentalId: string,
 ) {
-  await wakeUsersLiveSync([buyerId, sellerId], { rentalId });
+  scheduleLiveSyncAfterResponse([buyerId, sellerId], { rentalId });
 }
 
 async function assertParty(rentalId: string, userId: string) {
@@ -134,7 +134,7 @@ export async function requestReturnAction(
       existing &&
       !existing.verifiedAt
     ) {
-      await wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
+      wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
       return {
         ok: true,
         data: { rentalId: rental.id, peerUserId: rental.sellerId },
@@ -151,7 +151,7 @@ export async function requestReturnAction(
         where: { id: rental.id },
         data: { status: "RETURN_PENDING" },
       });
-      await wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
+      wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
       return {
         ok: true,
         data: { rentalId: rental.id, peerUserId: rental.sellerId },
@@ -208,7 +208,7 @@ export async function requestReturnAction(
         ],
       });
     });
-    await wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
+    wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
     return {
       ok: true,
       data: { rentalId: rental.id, peerUserId: rental.sellerId },
@@ -293,7 +293,7 @@ export async function generateVerificationAction(
 
       return result;
     });
-    await wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
+    wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
     scheduleVerificationReadyDelivery({
       buyerId: rental.buyerId,
       sellerId: rental.sellerId,
@@ -389,7 +389,7 @@ export async function regenerateVerificationAction(
 
       return result;
     });
-    await wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
+    wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
     return {
       ok: true,
       data: {
@@ -506,7 +506,7 @@ export async function verifyQrAction(
         });
       }
     });
-    await wakeRentalParties(rental.buyerId, rental.sellerId, rentalId);
+    wakeRentalParties(rental.buyerId, rental.sellerId, rentalId);
     return { ok: true, data: { verified: true } };
   } catch (error) {
     logger.error("verifyQrAction failed", {
@@ -608,11 +608,7 @@ export async function verifyPinAction(
         });
       }
     });
-    await wakeRentalParties(
-      rentalParty.buyerId,
-      rentalParty.sellerId,
-      rentalId,
-    );
+    wakeRentalParties(rentalParty.buyerId, rentalParty.sellerId, rentalId);
     return { ok: true, data: { verified: true } };
   } catch (error) {
     logger.error("verifyPinAction failed", {
@@ -821,7 +817,7 @@ export async function confirmStageAction(input: unknown): Promise<
 
       return { bothConfirmed, nextStatus };
     });
-    await wakeRentalParties(rental.buyerId, rental.sellerId, rentalId);
+    wakeRentalParties(rental.buyerId, rental.sellerId, rentalId);
     return { ok: true, data: result };
   } catch (error) {
     logger.error("confirmStageAction failed", {

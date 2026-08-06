@@ -19,7 +19,10 @@ export function perfStart(label: string): () => number {
 
   return () => {
     const ms = Math.round(performance.now() - start);
-    if (process.env.NODE_ENV === "development") {
+    const shouldLog =
+      process.env.NODE_ENV === "development" || process.env.PERF_LOG === "1";
+
+    if (shouldLog) {
       let prismaQueries = 0;
       let prismaMs = 0;
       let authGetUser = 0;

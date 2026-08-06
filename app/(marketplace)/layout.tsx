@@ -13,6 +13,7 @@ import { HeaderNotifications } from "@/features/notifications/components/header-
 import { toProfileViewModel } from "@/features/profile/types/profile";
 import { getCurrentProfile } from "@/lib/auth/guards";
 import { withPerf } from "@/lib/perf";
+import { logRequestSummary } from "@/lib/perf/request-summary";
 import { PreferredModeProvider } from "@/providers/preferred-mode-provider";
 
 /**
@@ -89,6 +90,8 @@ async function MarketplaceAuthHeader() {
       }
     : null;
   const preferredMode = profileView?.preferredMode ?? "BUYER";
+
+  logRequestSummary("layout.marketplace.header");
 
   return (
     <>

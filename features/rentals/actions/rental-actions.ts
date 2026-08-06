@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+
 import { parseDateOnly } from "@/domain/rental";
 import { scheduleRentalReminderJobs } from "@/features/jobs/scheduler";
 import {
@@ -7,7 +9,6 @@ import {
   scheduleChannelDelivery,
   scheduleVerificationReadyDelivery,
 } from "@/features/notifications/services/dispatch";
-import { wakeUsersLiveSync } from "@/features/realtime/server-live-sync";
 import {
   cancelRentalRequestSchema,
   createRentalRequestSchema,
@@ -30,6 +31,7 @@ import { createStageVerification } from "@/features/verification/services/create
 import { requireUser } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
+import { scheduleLiveSyncAfterResponse } from "@/lib/realtime/schedule-live-sync";
 
 /** Live UI syncs via Realtime + client cache — no revalidatePath (avoids full layout refresh). */
 
@@ -155,7 +157,7 @@ export async function createRentalRequestAction(input: unknown): Promise<
       };
     });
 
-    await wakeUsersLiveSync([result.sellerId, result.buyerId], {
+    scheduleLiveSyncAfterResponse([result.sellerId, result.buyerId], {
       rentalId: result.rentalId,
     });
     scheduleChannelDelivery([
@@ -269,7 +271,7 @@ export async function approveRentalRequestAction(
       });
     });
 
-    await wakeUsersLiveSync([rental.buyerId, rental.sellerId], {
+    scheduleLiveSyncAfterResponse([rental.buyerId, rental.sellerId], {
       rentalId: rental.id,
     });
     scheduleChannelDelivery([
@@ -290,14 +292,16 @@ export async function approveRentalRequestAction(
       listingTitle: rental.listing.title,
       stage: "HANDOVER",
     });
-    void scheduleRentalReminderJobs({
-      rentalId: rental.id,
-      buyerId: rental.buyerId,
-      sellerId: rental.sellerId,
-      listingId: rental.listingId,
-      listingTitle: rental.listing.title,
-      startDate: rental.startDate,
-      endDate: rental.endDate,
+    after(() => {
+      void scheduleRentalReminderJobs({
+        rentalId: rental.id,
+        buyerId: rental.buyerId,
+        sellerId: rental.sellerId,
+        listingId: rental.listingId,
+        listingTitle: rental.listing.title,
+        startDate: rental.startDate,
+        endDate: rental.endDate,
+      });
     });
     return {
       ok: true,
@@ -384,7 +388,7 @@ export async function rejectRentalRequestAction(
       });
     });
 
-    await wakeUsersLiveSync([rental.buyerId, rental.sellerId], {
+    scheduleLiveSyncAfterResponse([rental.buyerId, rental.sellerId], {
       rentalId: rental.id,
     });
     scheduleChannelDelivery([
@@ -502,7 +506,7 @@ export async function cancelRentalRequestAction(
       await recomputeCancellationRate(rental.sellerId, tx);
     });
 
-    await wakeUsersLiveSync([rental.buyerId, rental.sellerId], {
+    scheduleLiveSyncAfterResponse([rental.buyerId, rental.sellerId], {
       rentalId: rental.id,
     });
     scheduleChannelDelivery([
