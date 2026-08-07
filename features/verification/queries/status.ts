@@ -10,6 +10,10 @@ import {
   verificationForbidden,
   verificationNotFound,
 } from "@/features/verification/services/errors";
+import {
+  canDisplayVerificationCodes,
+  canVerifyVerification,
+} from "@/features/verification/services/verification-roles";
 import type { VerificationStatusView } from "@/features/verification/types/verification";
 import { prisma } from "@/lib/db/prisma";
 
@@ -75,8 +79,11 @@ export async function getVerificationStatusView(params: {
   );
   const isVerified = Boolean(verification?.verifiedAt);
 
+  const canDisplay = canDisplayVerificationCodes(params.stage, role);
+  const canVerifyRole = canVerifyVerification(params.stage, role);
+
   let pin: string | null = null;
-  if (verification && !isVerified) {
+  if (verification && !isVerified && canDisplay) {
     const secret = requireHmacSecret(getServerEnv().VERIFICATION_HMAC_SECRET);
     pin = derivePin(secret, verification.id);
   }
@@ -86,7 +93,7 @@ export async function getVerificationStatusView(params: {
   const youConfirmed = role === "buyer" ? buyerConfirmed : sellerConfirmed;
   const bothConfirmed = buyerConfirmed && sellerConfirmed;
 
-  const canRegenerate =
+  const canRegenerateBase =
     Boolean(verification) &&
     !isVerified &&
     (isExpired ||
@@ -95,7 +102,7 @@ export async function getVerificationStatusView(params: {
       rental.status === "APPROVED" ||
       rental.status === "ACTIVE");
 
-  const canVerify =
+  const canVerifyBase =
     Boolean(verification) &&
     !isVerified &&
     !isExpired &&
@@ -121,7 +128,8 @@ export async function getVerificationStatusView(params: {
     role,
     peerUserId: role === "buyer" ? rental.sellerId : rental.buyerId,
     verificationId: verification?.id ?? null,
-    qrPayload: verification && !isVerified ? verification.qrPayload : null,
+    qrPayload:
+      verification && !isVerified && canDisplay ? verification.qrPayload : null,
     pin,
     expiresAt: verification?.expiresAt.toISOString() ?? null,
     generatedAt: verification?.generatedAt.toISOString() ?? null,
@@ -138,8 +146,9 @@ export async function getVerificationStatusView(params: {
     youConfirmed,
     bothConfirmed,
     confirmationCompletedAt: confirmation?.completedAt?.toISOString() ?? null,
-    canRegenerate: Boolean(canRegenerate && !isVerified),
-    canVerify: Boolean(canVerify),
+    canRegenerate: Boolean(canRegenerateBase && canDisplay && !isVerified),
+    canDisplay,
+    canVerify: Boolean(canVerifyBase && canVerifyRole),
     canConfirm: Boolean(canConfirm),
   };
 }

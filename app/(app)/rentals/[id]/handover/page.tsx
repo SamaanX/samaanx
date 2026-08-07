@@ -37,7 +37,8 @@ export default async function HandoverVerificationPage({
           <BackButton fallbackHref={fallbackHref} />
           <h1 className="text-2xl font-semibold tracking-tight">Handover</h1>
           <p className="text-muted-foreground text-sm">
-            {status.listingTitle} · verify possession transfer
+            {status.listingTitle} · owner shows codes, renter verifies on their
+            device
           </p>
         </header>
 

@@ -39,7 +39,8 @@ export default async function ReturnVerificationPage({
             Return confirmation
           </h1>
           <p className="text-muted-foreground text-sm">
-            {status.listingTitle} · both parties must confirm after QR/PIN
+            {status.listingTitle} · renter shows codes, owner verifies on their
+            device
           </p>
         </header>
 

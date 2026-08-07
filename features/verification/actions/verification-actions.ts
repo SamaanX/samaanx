@@ -24,10 +24,15 @@ import { createStageVerification } from "@/features/verification/services/create
 import {
   toVerificationActionError,
   verificationConflict,
+  verificationForbidden,
   verificationNotFound,
   verificationRateLimited,
   verificationValidation,
 } from "@/features/verification/services/errors";
+import {
+  canDisplayVerificationCodes,
+  canVerifyVerification,
+} from "@/features/verification/services/verification-roles";
 import type {
   GenerateVerificationResult,
   VerificationActionResult,
@@ -62,6 +67,39 @@ async function assertParty(rentalId: string, userId: string) {
     throw verificationNotFound();
   }
   return rental;
+}
+
+function partyRole(
+  rental: { buyerId: string; sellerId: string },
+  userId: string,
+): "buyer" | "seller" {
+  return rental.buyerId === userId ? "buyer" : "seller";
+}
+
+function assertCanDisplayCodes(
+  stage: "HANDOVER" | "RETURN",
+  role: "buyer" | "seller",
+): void {
+  if (!canDisplayVerificationCodes(stage, role)) {
+    throw verificationForbidden(
+      stage === "HANDOVER"
+        ? "Only the owner can show handover codes."
+        : "Only the renter can show return codes.",
+    );
+  }
+}
+
+function assertCanVerifyCodes(
+  stage: "HANDOVER" | "RETURN",
+  role: "buyer" | "seller",
+): void {
+  if (!canVerifyVerification(stage, role)) {
+    throw verificationForbidden(
+      stage === "HANDOVER"
+        ? "Only the renter can verify handover."
+        : "Only the owner can verify return.",
+    );
+  }
 }
 
 export async function getVerificationStatusAction(
@@ -239,6 +277,7 @@ export async function generateVerificationAction(
 
     const { rentalId, stage } = parsed.data;
     const rental = await assertParty(rentalId, profile.id);
+    assertCanDisplayCodes(stage, partyRole(rental, profile.id));
 
     if (stage === "HANDOVER") {
       if (
@@ -339,6 +378,7 @@ export async function regenerateVerificationAction(
 
     const { rentalId, stage } = parsed.data;
     const rental = await assertParty(rentalId, profile.id);
+    assertCanDisplayCodes(stage, partyRole(rental, profile.id));
 
     const current = await prisma.rentalVerification.findFirst({
       where: { rentalId, stage, isCurrent: true },
@@ -427,6 +467,7 @@ export async function verifyQrAction(
 
     const { rentalId, stage, qrPayload } = parsed.data;
     const rental = await assertParty(rentalId, profile.id);
+    assertCanVerifyCodes(stage, partyRole(rental, profile.id));
     const secret = requireHmacSecret(getServerEnv().VERIFICATION_HMAC_SECRET);
 
     await prisma.$transaction(async (tx) => {
@@ -541,6 +582,7 @@ export async function verifyPinAction(
 
     const { rentalId, stage, pin } = parsed.data;
     const rentalParty = await assertParty(rentalId, profile.id);
+    assertCanVerifyCodes(stage, partyRole(rentalParty, profile.id));
 
     await prisma.$transaction(async (tx) => {
       const verification = await tx.rentalVerification.findFirst({

@@ -44,6 +44,7 @@ export type VerificationStatusView = {
   bothConfirmed: boolean;
   confirmationCompletedAt: string | null;
   canRegenerate: boolean;
+  canDisplay: boolean;
   canVerify: boolean;
   canConfirm: boolean;
 };

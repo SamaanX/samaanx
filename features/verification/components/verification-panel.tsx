@@ -25,6 +25,10 @@ import {
   ReturnProgress,
 } from "@/features/verification/components/return-progress";
 import { VerificationStateScreen } from "@/features/verification/components/verification-state-screen";
+import {
+  displayPartyLabel,
+  verifyPartyLabel,
+} from "@/features/verification/services/verification-roles";
 import type { VerificationStatusView } from "@/features/verification/types/verification";
 import { trackEvent } from "@/lib/analytics/events";
 import { queryKeys } from "@/lib/query-keys";
@@ -164,18 +168,16 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
         <div className="border-border bg-card space-y-4 rounded-2xl border p-5 shadow-[var(--rp-shadow-sm)]">
           <h2 className="text-lg font-semibold">{stageLabel} codes</h2>
           <p className="text-muted-foreground text-sm">
-            {isReturn
-              ? status.role === "buyer"
-                ? "Start return from My Rentals with Return Item, or generate codes here."
-                : "Waiting for the renter to request return. Codes appear once return starts."
-              : `Generate secure QR and PIN codes for this ${stageLabel.toLowerCase()}.`}
+            {status.canDisplay
+              ? `Generate secure QR and PIN codes for the ${stageLabel.toLowerCase()}. The ${verifyPartyLabel(stage)} will scan or enter them on their device.`
+              : `Waiting for the ${displayPartyLabel(stage)} to generate ${stageLabel.toLowerCase()} codes.`}
           </p>
           {error ? (
             <p className="text-destructive text-sm" role="alert">
               {error}
             </p>
           ) : null}
-          {!(isReturn && status.role === "seller") ? (
+          {status.canDisplay ? (
             <Button
               type="button"
               size="lg"
@@ -192,7 +194,12 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
             >
               Generate {stageLabel} codes
             </Button>
-          ) : null}
+          ) : (
+            <p className="bg-muted/60 text-muted-foreground rounded-xl px-4 py-3 text-center text-sm">
+              Codes will appear here once the {displayPartyLabel(stage)} starts
+              the {stageLabel.toLowerCase()}.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -212,22 +219,28 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
             {error}
           </p>
         ) : null}
-        <Button
-          type="button"
-          size="lg"
-          className="w-full"
-          disabled={busy}
-          onClick={() =>
-            void run(() =>
-              regenerateVerificationAction({
-                rentalId: status.rentalId,
-                stage,
-              }),
-            )
-          }
-        >
-          Regenerate codes
-        </Button>
+        {status.canDisplay ? (
+          <Button
+            type="button"
+            size="lg"
+            className="w-full"
+            disabled={busy}
+            onClick={() =>
+              void run(() =>
+                regenerateVerificationAction({
+                  rentalId: status.rentalId,
+                  stage,
+                }),
+              )
+            }
+          >
+            Regenerate codes
+          </Button>
+        ) : (
+          <p className="bg-muted/60 text-muted-foreground rounded-xl px-4 py-3 text-center text-sm">
+            Waiting for the {displayPartyLabel(stage)} to regenerate codes.
+          </p>
+        )}
       </div>
     );
   }
@@ -364,23 +377,116 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
     );
   }
 
+  if (status.canDisplay) {
+    return (
+      <div className="space-y-6">
+        {isReturn ? <ReturnProgress steps={returnSteps} /> : null}
+
+        <p className="border-brand-green/20 bg-brand-green/10 text-brand-green rounded-xl border px-4 py-3 text-sm">
+          Show this screen to the {verifyPartyLabel(stage)} at the meetup. They
+          will scan the QR or enter the PIN on their device — you cannot verify
+          your own codes.
+        </p>
+
+        <div className="border-border bg-card rounded-2xl border p-5 shadow-[var(--rp-shadow-sm)]">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">{stageLabel} codes</h2>
+              <p className="text-muted-foreground text-sm">
+                Display only — verification happens on the other party&apos;s
+                phone.
+              </p>
+            </div>
+            {status.expiresAt ? (
+              <CountdownTimer
+                expiresAt={status.expiresAt}
+                onExpire={() => void refreshStatus()}
+              />
+            ) : null}
+          </div>
+
+          {status.qrPayload ? <QrDisplay payload={status.qrPayload} /> : null}
+
+          {status.pin ? (
+            <div className="bg-brand-blue-soft mt-4 rounded-xl px-4 py-3 text-center">
+              <p className="text-muted-foreground text-xs font-medium">PIN</p>
+              <p
+                className="text-brand-blue mt-1 font-mono text-3xl font-semibold tracking-[0.35em]"
+                aria-label={`PIN ${status.pin.split("").join(" ")}`}
+              >
+                {status.pin}
+              </p>
+            </div>
+          ) : null}
+
+          <p className="text-muted-foreground mt-3 text-center text-xs">
+            Failed attempts on the other device: {status.failedAttempts}/
+            {status.maxAttempts}
+          </p>
+
+          {status.canRegenerate ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-4 w-full"
+              disabled={busy}
+              onClick={() =>
+                void run(() =>
+                  regenerateVerificationAction({
+                    rentalId: status.rentalId,
+                    stage,
+                  }),
+                )
+              }
+            >
+              Regenerate codes
+            </Button>
+          ) : null}
+
+          {error ? (
+            <p className="text-destructive mt-3 text-sm" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {isReturn ? <ReturnProgress steps={returnSteps} /> : null}
 
       {isReturn && status.role === "buyer" ? (
         <p className="border-brand-blue/20 bg-brand-blue-soft/50 text-brand-blue rounded-xl border px-4 py-3 text-sm">
-          Return started. Complete QR/PIN with the owner, then confirm. You will
-          wait for seller confirmation before the rental completes.
+          Return started. Ask the owner to verify your QR/PIN on their device,
+          then confirm when done.
         </p>
       ) : null}
 
-      <div className="border-border bg-card rounded-2xl border p-5 shadow-[var(--rp-shadow-sm)]">
-        <div className="mb-4 flex items-start justify-between gap-3">
+      {stage === "HANDOVER" && status.role === "buyer" ? (
+        <p className="border-brand-blue/20 bg-brand-blue-soft/50 text-brand-blue rounded-xl border px-4 py-3 text-sm">
+          Ask the owner to show their QR code or PIN. Scan or enter it below to
+          confirm you received the item.
+        </p>
+      ) : null}
+
+      {stage === "RETURN" && status.role === "seller" ? (
+        <p className="border-brand-blue/20 bg-brand-blue-soft/50 text-brand-blue rounded-xl border px-4 py-3 text-sm">
+          Ask the renter to show their return QR or PIN. Verify it here before
+          confirming you received the item.
+        </p>
+      ) : null}
+
+      <div className="border-border bg-card space-y-4 rounded-2xl border p-5 shadow-[var(--rp-shadow-sm)]">
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">{stageLabel} codes</h2>
+            <h2 className="text-lg font-semibold">
+              Verify {stageLabel.toLowerCase()}
+            </h2>
             <p className="text-muted-foreground text-sm">
-              Show QR or share PIN at the meeting. Either works.
+              Scan the QR from the {displayPartyLabel(stage)}&apos;s screen or
+              enter their PIN.
             </p>
           </div>
           {status.expiresAt ? (
@@ -390,47 +496,6 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
             />
           ) : null}
         </div>
-
-        {status.qrPayload ? <QrDisplay payload={status.qrPayload} /> : null}
-
-        {status.pin ? (
-          <div className="bg-brand-blue-soft mt-4 rounded-xl px-4 py-3 text-center">
-            <p className="text-muted-foreground text-xs font-medium">PIN</p>
-            <p
-              className="text-brand-blue mt-1 font-mono text-3xl font-semibold tracking-[0.35em]"
-              aria-label={`PIN ${status.pin.split("").join(" ")}`}
-            >
-              {status.pin}
-            </p>
-          </div>
-        ) : null}
-
-        <p className="text-muted-foreground mt-3 text-center text-xs">
-          Failed attempts: {status.failedAttempts}/{status.maxAttempts}
-        </p>
-
-        {status.canRegenerate ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="mt-4 w-full"
-            disabled={busy}
-            onClick={() =>
-              void run(() =>
-                regenerateVerificationAction({
-                  rentalId: status.rentalId,
-                  stage,
-                }),
-              )
-            }
-          >
-            Regenerate codes
-          </Button>
-        ) : null}
-      </div>
-
-      <div className="border-border bg-card space-y-4 rounded-2xl border p-5 shadow-[var(--rp-shadow-sm)]">
-        <h3 className="text-base font-semibold">Verify at meeting</h3>
 
         <form
           className="space-y-3"
@@ -461,7 +526,8 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
               aria-describedby="pin-help"
             />
             <p id="pin-help" className="text-muted-foreground text-xs">
-              Enter the PIN shown on the other party’s screen.
+              Enter the PIN shown on the {displayPartyLabel(stage)}&apos;s
+              device.
             </p>
           </div>
           <Button
@@ -483,11 +549,13 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
           className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
+            const payload = qrInput.trim();
+            if (!payload) return;
             void run(() =>
               verifyQrAction({
                 rentalId: status.rentalId,
                 stage,
-                qrPayload: qrInput.trim() || status.qrPayload || "",
+                qrPayload: payload,
               }),
             );
           }}
@@ -501,38 +569,23 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
               placeholder="RENTPE|…"
               className="h-11 font-mono text-xs"
             />
+            <p className="text-muted-foreground text-xs">
+              After scanning the {displayPartyLabel(stage)}&apos;s QR code,
+              paste the payload here.
+            </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              disabled={busy || !status.qrPayload || !status.canVerify}
-              onClick={() =>
-                void run(() =>
-                  verifyQrAction({
-                    rentalId: status.rentalId,
-                    stage,
-                    qrPayload: status.qrPayload!,
-                  }),
-                )
-              }
-            >
-              Verify shown QR
-            </Button>
-            <Button
-              type="submit"
-              className="flex-1"
-              disabled={
-                busy ||
-                !status.canVerify ||
-                !(qrInput.trim() || status.qrPayload)
-              }
-            >
-              Verify pasted QR
-            </Button>
-          </div>
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={busy || !status.canVerify || !qrInput.trim()}
+          >
+            Verify scanned QR
+          </Button>
         </form>
+
+        <p className="text-muted-foreground text-center text-xs">
+          Failed attempts: {status.failedAttempts}/{status.maxAttempts}
+        </p>
 
         {error ? (
           <p className="text-destructive text-sm" role="alert">
