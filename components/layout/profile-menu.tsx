@@ -5,6 +5,7 @@ import {
   Heart,
   LayoutDashboard,
   LogOut,
+  MessageSquareHeart,
   Package,
   Settings,
   Shield,
@@ -33,6 +34,7 @@ const MENU_ITEMS = [
   { href: "/seller/listings", label: "My Listings", icon: LayoutDashboard },
   { href: "/wishlist", label: "Wishlist", icon: Heart },
   { href: "/profile#account", label: "Settings", icon: Settings },
+  { href: "/feedback", label: "Send feedback", icon: MessageSquareHeart },
   { href: "/help", label: "Help", icon: CircleHelp },
 ] as const;
 

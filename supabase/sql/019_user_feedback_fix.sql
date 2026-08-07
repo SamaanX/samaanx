@@ -1,5 +1,18 @@
--- User-submitted product feedback (profile → admin triage).
--- Enum names MUST match Prisma schema: "FeedbackCategory", "FeedbackStatus".
+-- Repair feedback table if 018 was applied with snake_case enum types (feedback_category / feedback_status).
+-- Safe to run even when the correct schema already exists.
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'feedback_category'
+  ) THEN
+    DROP TABLE IF EXISTS public.user_feedback;
+    DROP TYPE IF EXISTS public.feedback_category;
+    DROP TYPE IF EXISTS public.feedback_status;
+  END IF;
+END $$;
 
 DO $$ BEGIN
   CREATE TYPE "FeedbackCategory" AS ENUM (

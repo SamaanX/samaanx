@@ -1,40 +1,14 @@
 "use client";
 
-import type { FeedbackCategory } from "@prisma/client";
-import {
-  Bug,
-  ChevronDown,
-  Lightbulb,
-  MessageSquareHeart,
-  Palette,
-  Sparkles,
-} from "lucide-react";
+import { MessageSquareHeart } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
-import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  createFeedbackAction,
-  getMyFeedbackAction,
-} from "@/features/feedback/actions/feedback-actions";
-import {
-  FEEDBACK_CATEGORY_OPTIONS,
-  FEEDBACK_STATUS_LABELS,
-} from "@/features/feedback/types/feedback";
-import { FormMessage } from "@/features/profile/components/form-message";
-import { LoadingButton } from "@/features/profile/components/loading-button";
+import { buttonVariants } from "@/components/ui/button";
+import { getMyFeedbackAction } from "@/features/feedback/actions/feedback-actions";
+import { FeedbackDialog } from "@/features/feedback/components/feedback-dialog";
+import { FEEDBACK_STATUS_LABELS } from "@/features/feedback/types/feedback";
 import { cn } from "@/lib/utils";
-
-const CATEGORY_ICONS: Record<FeedbackCategory, React.ReactNode> = {
-  BUG: <Bug className="size-4" aria-hidden />,
-  FEATURE: <Lightbulb className="size-4" aria-hidden />,
-  UX: <Palette className="size-4" aria-hidden />,
-  GENERAL: <Sparkles className="size-4" aria-hidden />,
-  OTHER: <MessageSquareHeart className="size-4" aria-hidden />,
-};
 
 type RecentFeedback = {
   id: string;
@@ -45,55 +19,15 @@ type RecentFeedback = {
 };
 
 export function FeedbackCard() {
-  const [open, setOpen] = React.useState(false);
-  const [category, setCategory] = React.useState<FeedbackCategory>("GENERAL");
-  const [subject, setSubject] = React.useState("");
-  const [message, setMessage] = React.useState("");
-  const [pending, setPending] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
   const [recent, setRecent] = React.useState<RecentFeedback[]>([]);
-  const [loadingRecent, setLoadingRecent] = React.useState(false);
+  const [loadingRecent, setLoadingRecent] = React.useState(true);
 
   React.useEffect(() => {
-    if (!open) return;
-    setLoadingRecent(true);
     void getMyFeedbackAction().then((result) => {
       setLoadingRecent(false);
       if (result.ok) setRecent(result.data);
     });
-  }, [open]);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setPending(true);
-    setError(null);
-
-    const pageUrl =
-      typeof window !== "undefined" ? window.location.pathname : null;
-
-    const result = await createFeedbackAction({
-      category,
-      subject,
-      message,
-      pageUrl,
-    });
-
-    setPending(false);
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-
-    setSubject("");
-    setMessage("");
-    setCategory("GENERAL");
-    toast.success("Thanks for your feedback!", {
-      description: "Our team will review it soon.",
-    });
-
-    const history = await getMyFeedbackAction();
-    if (history.ok) setRecent(history.data);
-  }
+  }, []);
 
   return (
     <section
@@ -101,18 +35,12 @@ export function FeedbackCard() {
       aria-labelledby="feedback-heading"
       className="border-border/70 bg-card scroll-mt-28 overflow-hidden rounded-[1.35rem] border shadow-[var(--rp-shadow-xs)] sm:rounded-[1.5rem]"
     >
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left sm:px-5"
-        aria-expanded={open}
-        aria-controls="feedback-panel"
-        onClick={() => setOpen((v) => !v)}
-      >
+      <div className="px-4 py-4 sm:px-5 sm:py-5">
         <div className="flex min-w-0 items-start gap-3">
           <span className="bg-brand-green/15 text-brand-green mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-xl">
             <MessageSquareHeart className="size-4" aria-hidden />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2
               id="feedback-heading"
               className="text-lg font-semibold tracking-tight"
@@ -120,141 +48,48 @@ export function FeedbackCard() {
               Send feedback
             </h2>
             <p className="text-muted-foreground mt-0.5 text-sm">
-              Help us improve SamaanX — bugs, ideas, and UX thoughts welcome.
+              Found a bug or have an idea? Tell us — it only takes a minute.
             </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <FeedbackDialog triggerLabel="Send feedback" variant="default" />
+              <Link
+                href="/feedback"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "rounded-xl",
+                )}
+              >
+                Open feedback page
+              </Link>
+            </div>
           </div>
         </div>
-        <ChevronDown
-          className={cn(
-            "text-muted-foreground size-5 shrink-0 transition-transform",
-            open && "rotate-180",
-          )}
-          aria-hidden
-        />
-      </button>
 
-      {open ? (
-        <div
-          id="feedback-panel"
-          className="border-border/60 space-y-5 border-t px-4 py-4 sm:px-5 sm:py-5"
-        >
-          <form onSubmit={(e) => void onSubmit(e)} className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Category</Label>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {FEEDBACK_CATEGORY_OPTIONS.map((opt) => {
-                  const selected = category === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setCategory(opt.value)}
-                      className={cn(
-                        "rounded-xl border px-3 py-2.5 text-left transition-colors",
-                        selected
-                          ? "border-brand-blue bg-brand-blue-soft text-brand-blue"
-                          : "border-border/70 hover:border-brand-blue/30 hover:bg-muted/40",
-                      )}
-                    >
-                      <span className="flex items-center gap-2 text-sm font-medium">
-                        {CATEGORY_ICONS[opt.value]}
-                        {opt.label}
-                      </span>
-                      <span className="text-muted-foreground mt-0.5 block text-xs">
-                        {opt.description}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="feedback-subject">Subject</Label>
-              <Input
-                id="feedback-subject"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Short summary of your feedback"
-                maxLength={120}
-                className="rounded-xl"
-                disabled={pending}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="feedback-message">Details</Label>
-              <Textarea
-                id="feedback-message"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Tell us what happened, what you expected, or what you'd love to see..."
-                rows={5}
-                maxLength={2000}
-                className="min-h-[7rem] resize-y rounded-xl"
-                disabled={pending}
-              />
-              <p className="text-muted-foreground text-xs">
-                {message.length}/2000 characters
-              </p>
-            </div>
-
-            <FormMessage message={error} />
-
-            <div className="flex flex-wrap gap-2">
-              <LoadingButton
-                type="submit"
-                loading={pending}
-                className="rounded-xl"
-              >
-                Submit feedback
-              </LoadingButton>
-              <Button
-                type="button"
-                variant="ghost"
-                className="rounded-xl"
-                disabled={pending}
-                onClick={() => {
-                  setSubject("");
-                  setMessage("");
-                  setError(null);
-                }}
-              >
-                Clear
-              </Button>
-            </div>
-          </form>
-
-          {(loadingRecent || recent.length > 0) && (
-            <div className="border-border/60 space-y-2 border-t pt-4">
-              <p className="text-sm font-medium">Your recent submissions</p>
-              {loadingRecent ? (
-                <p className="text-muted-foreground text-xs">Loading…</p>
-              ) : (
-                <ul className="space-y-2">
-                  {recent.map((item) => (
-                    <li
-                      key={item.id}
-                      className="border-border/60 bg-muted/30 rounded-xl border px-3 py-2.5"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-medium">{item.subject}</p>
-                        <span className="text-muted-foreground text-xs">
-                          {FEEDBACK_STATUS_LABELS[item.status] ?? item.status}
-                        </span>
-                      </div>
-                      <p className="text-muted-foreground mt-0.5 text-xs">
-                        {item.category} ·{" "}
-                        {new Date(item.createdAt).toLocaleDateString()}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      ) : null}
+        {!loadingRecent && recent.length > 0 ? (
+          <div className="border-border/60 mt-5 space-y-2 border-t pt-4">
+            <p className="text-sm font-medium">Your recent submissions</p>
+            <ul className="space-y-2">
+              {recent.map((item) => (
+                <li
+                  key={item.id}
+                  className="border-border/60 bg-muted/30 rounded-xl border px-3 py-2.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{item.subject}</p>
+                    <span className="text-muted-foreground text-xs">
+                      {FEEDBACK_STATUS_LABELS[item.status] ?? item.status}
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground mt-0.5 text-xs">
+                    {item.category} ·{" "}
+                    {new Date(item.createdAt).toLocaleDateString()}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
     </section>
   );
 }

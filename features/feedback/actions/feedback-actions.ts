@@ -1,10 +1,24 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
+
 import { createFeedbackSchema } from "@/features/feedback/schemas/feedback";
 import type { FeedbackActionResult } from "@/features/feedback/types/feedback";
 import { requireUser } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
+
+function feedbackErrorMessage(error: unknown): string {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2021") {
+      return "Feedback is not available yet. Please try again later or email support@samaanx.com.";
+    }
+    if (error.code === "42P01" || error.message.includes("user_feedback")) {
+      return "Feedback is not set up on the server yet. Please contact support.";
+    }
+  }
+  return "Could not send feedback. Please try again.";
+}
 
 export async function createFeedbackAction(
   input: unknown,
@@ -37,12 +51,16 @@ export async function createFeedbackAction(
   } catch (error) {
     logger.error("createFeedbackAction failed", {
       message: error instanceof Error ? error.message : "unknown",
+      code:
+        error instanceof Prisma.PrismaClientKnownRequestError
+          ? error.code
+          : undefined,
     });
     return {
       ok: false,
       error: {
         code: "INTERNAL",
-        message: "Could not send feedback. Please try again.",
+        message: feedbackErrorMessage(error),
       },
     };
   }

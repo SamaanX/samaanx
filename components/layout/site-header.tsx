@@ -12,6 +12,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { HeaderHomeLink } from "@/features/activity/components/activity-banner";
 import { ThemeToggle } from "@/features/auth/components/theme-toggle";
 import { useChatUnreadTotal } from "@/features/chat/hooks/use-chat-unread-total";
+import { FeedbackDialog } from "@/features/feedback/components/feedback-dialog";
 import type { ProfileViewModel } from "@/features/profile/types/profile";
 import { type AppUiMode, navForMode } from "@/lib/ui/app-mode";
 import { cn } from "@/lib/utils";
@@ -129,6 +130,15 @@ export function SiteHeader({
 
           {isAuthenticated ? notificationSlot : null}
 
+          {isAuthenticated ? (
+            <FeedbackDialog
+              variant="ghost"
+              size="icon"
+              iconOnly
+              triggerClassName="hidden sm:inline-flex"
+            />
+          ) : null}
+
           {!isSeller ? (
             <Link
               href="/search"
@@ -240,6 +250,16 @@ export function SiteHeader({
                     className="hover:bg-brand-blue-soft hover:text-brand-blue block rounded-xl px-3 py-3 text-sm font-medium"
                   >
                     Wishlist
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/feedback"
+                    prefetch
+                    onClick={() => setOpen(false)}
+                    className="hover:bg-brand-blue-soft hover:text-brand-blue block rounded-xl px-3 py-3 text-sm font-medium"
+                  >
+                    Send feedback
                   </Link>
                 </li>
                 <li>

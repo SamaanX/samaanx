@@ -1,9 +1,13 @@
-import { CircleHelp, Mail } from "lucide-react";
+import { CircleHelp, Mail, MessageSquareHeart } from "lucide-react";
 import Link from "next/link";
 
 import { BackButton } from "@/components/navigation/back-button";
 import { BACK_FALLBACKS } from "@/components/navigation/back-fallbacks";
+import { buttonVariants } from "@/components/ui/button";
+import { FeedbackForm } from "@/features/feedback/components/feedback-form";
+import { getCurrentProfile } from "@/lib/auth/guards";
 import { faqSchema, JsonLd, organizationSchema } from "@/lib/seo/json-ld";
+import { cn } from "@/lib/utils";
 
 export const metadata = {
   title: "Help",
@@ -28,8 +32,9 @@ const HELP_FAQS = [
   },
 ] as const;
 
-/** Lightweight help placeholder — full support center later. */
-export default function HelpPage() {
+export default async function HelpPage() {
+  const profile = await getCurrentProfile();
+
   return (
     <div className="mx-auto w-full max-w-2xl px-4 pt-4 pb-16 sm:px-6 sm:pt-6">
       <JsonLd
@@ -49,6 +54,26 @@ export default function HelpPage() {
           Quick answers while we build a full help center.
         </p>
       </header>
+
+      <section className="border-brand-green/25 bg-brand-green/5 mb-6 rounded-2xl border p-4 sm:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <MessageSquareHeart className="text-brand-green size-5" aria-hidden />
+          <h2 className="text-base font-semibold">Send us feedback</h2>
+        </div>
+        <p className="text-muted-foreground mb-4 text-sm">
+          Spotted a bug or have an idea? We read every message.
+        </p>
+        {profile ? (
+          <FeedbackForm showIntro={false} />
+        ) : (
+          <Link
+            href="/login?next=/feedback"
+            className={cn(buttonVariants({ size: "sm" }), "rounded-xl")}
+          >
+            Sign in to send feedback
+          </Link>
+        )}
+      </section>
 
       <div className="space-y-3">
         <section className="border-border/80 bg-card rounded-2xl border p-4 shadow-[var(--rp-shadow-xs)]">
