@@ -1,6 +1,7 @@
 import { after } from "next/server";
 
 import { wakeUsersLiveSync } from "@/features/realtime/server-live-sync";
+import type { LiveSyncVerificationPatch } from "@/features/realtime/verification-sync";
 import { logger } from "@/lib/logger";
 
 /**
@@ -9,7 +10,10 @@ import { logger } from "@/lib/logger";
  */
 export function scheduleLiveSyncAfterResponse(
   userIds: Array<string | null | undefined>,
-  options?: { rentalId?: string | null },
+  options?: {
+    rentalId?: string | null;
+    verification?: LiveSyncVerificationPatch;
+  },
 ): void {
   after(async () => {
     try {

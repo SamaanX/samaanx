@@ -9,6 +9,7 @@ import {
   verifyQrPayload,
 } from "@/domain/verification";
 import { scheduleVerificationReadyDelivery } from "@/features/notifications/services/dispatch";
+import type { LiveSyncVerificationPatch } from "@/features/realtime/verification-sync";
 import { buildInAppNotificationData } from "@/features/rentals/services/notifications";
 import { getVerificationStatusView } from "@/features/verification/queries/status";
 import {
@@ -49,8 +50,12 @@ function wakeRentalParties(
   buyerId: string,
   sellerId: string,
   rentalId: string,
+  verification?: LiveSyncVerificationPatch,
 ) {
-  scheduleLiveSyncAfterResponse([buyerId, sellerId], { rentalId });
+  scheduleLiveSyncAfterResponse([buyerId, sellerId], {
+    rentalId,
+    verification,
+  });
 }
 
 async function assertParty(rentalId: string, userId: string) {
@@ -554,7 +559,18 @@ export async function verifyQrAction(
         });
       }
     });
-    wakeRentalParties(rental.buyerId, rental.sellerId, rentalId);
+    wakeRentalParties(rental.buyerId, rental.sellerId, rentalId, {
+      stage,
+      isVerified: true,
+      verifiedMethod: "QR",
+      canVerify: false,
+      rentalStatus:
+        stage === "RETURN"
+          ? "RETURN_PENDING"
+          : rental.status === "APPROVED"
+            ? "HANDOVER_PENDING"
+            : rental.status,
+    });
     return { ok: true, data: { verified: true } };
   } catch (error) {
     logger.error("verifyQrAction failed", {
@@ -664,7 +680,18 @@ export async function verifyPinAction(
         });
       }
     });
-    wakeRentalParties(rentalParty.buyerId, rentalParty.sellerId, rentalId);
+    wakeRentalParties(rentalParty.buyerId, rentalParty.sellerId, rentalId, {
+      stage,
+      isVerified: true,
+      verifiedMethod: "PIN",
+      canVerify: false,
+      rentalStatus:
+        stage === "RETURN"
+          ? "RETURN_PENDING"
+          : rentalParty.status === "APPROVED"
+            ? "HANDOVER_PENDING"
+            : rentalParty.status,
+    });
     return { ok: true, data: { verified: true } };
   } catch (error) {
     logger.error("verifyPinAction failed", {
@@ -678,6 +705,8 @@ export async function confirmStageAction(input: unknown): Promise<
   VerificationActionResult<{
     bothConfirmed: boolean;
     nextStatus: string;
+    buyerConfirmed: boolean;
+    sellerConfirmed: boolean;
   }>
 > {
   try {
@@ -712,6 +741,27 @@ export async function confirmStageAction(input: unknown): Promise<
       });
       if (!confirmation) {
         throw verificationNotFound();
+      }
+
+      if (isBuyer && confirmation.buyerConfirmed) {
+        const bothConfirmed =
+          confirmation.buyerConfirmed && confirmation.sellerConfirmed;
+        return {
+          bothConfirmed,
+          nextStatus: rental.status,
+          buyerConfirmed: true,
+          sellerConfirmed: confirmation.sellerConfirmed,
+        };
+      }
+      if (!isBuyer && confirmation.sellerConfirmed) {
+        const bothConfirmed =
+          confirmation.buyerConfirmed && confirmation.sellerConfirmed;
+        return {
+          bothConfirmed,
+          nextStatus: rental.status,
+          buyerConfirmed: confirmation.buyerConfirmed,
+          sellerConfirmed: true,
+        };
       }
 
       await tx.rentalConfirmation.update({
@@ -871,9 +921,20 @@ export async function confirmStageAction(input: unknown): Promise<
         }
       }
 
-      return { bothConfirmed, nextStatus };
+      return {
+        bothConfirmed,
+        nextStatus,
+        buyerConfirmed: fresh.buyerConfirmed,
+        sellerConfirmed: fresh.sellerConfirmed,
+      };
     });
-    wakeRentalParties(rental.buyerId, rental.sellerId, rentalId);
+    wakeRentalParties(rental.buyerId, rental.sellerId, rentalId, {
+      stage,
+      buyerConfirmed: result.buyerConfirmed,
+      sellerConfirmed: result.sellerConfirmed,
+      bothConfirmed: result.bothConfirmed,
+      rentalStatus: result.nextStatus,
+    });
     return { ok: true, data: result };
   } catch (error) {
     logger.error("confirmStageAction failed", {

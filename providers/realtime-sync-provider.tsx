@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { bumpLiveSurfaces } from "@/features/realtime/live-sync";
+import type { LiveSyncVerificationPatch } from "@/features/realtime/verification-sync";
 import { queryKeys } from "@/lib/query-keys";
 import { createClient } from "@/lib/supabase/client";
 import { ChatRealtimeHost } from "@/providers/chat-realtime-host";
@@ -32,23 +33,43 @@ export function RealtimeSyncProvider({
 
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const bump = (rentalId?: string | null) => {
+    const runBump = (
+      rentalId?: string | null,
+      verification?: LiveSyncVerificationPatch,
+    ) => {
+      bumpLiveSurfaces(
+        queryClient,
+        ["rentals", "activity", "notifications", "chatStatus", "verification"],
+        { rentalId, verification },
+      );
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent(REALTIME_RENTAL_EVENT, {
+            detail: { rentalId: rentalId ?? null },
+          }),
+        );
+      }
+    };
+
+    const bump = (
+      rentalId?: string | null,
+      options?: {
+        immediate?: boolean;
+        verification?: LiveSyncVerificationPatch;
+      },
+    ) => {
+      const verification = options?.verification;
+
+      if (options?.immediate && rentalId) {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = null;
+        runBump(rentalId, verification);
+        return;
+      }
+
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        bumpLiveSurfaces(queryClient, [
-          "rentals",
-          "activity",
-          "notifications",
-          "chatStatus",
-          "verification",
-        ]);
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent(REALTIME_RENTAL_EVENT, {
-              detail: { rentalId: rentalId ?? null },
-            }),
-          );
-        }
+        runBump(rentalId, verification);
       }, 160);
     };
 
@@ -59,14 +80,20 @@ export function RealtimeSyncProvider({
       config: { broadcast: { self: true } },
     });
     broadcastChannel.on("broadcast", { event: "sync" }, ({ payload }) => {
-      const rentalId =
-        payload &&
-        typeof payload === "object" &&
-        "rentalId" in payload &&
-        typeof (payload as { rentalId?: unknown }).rentalId === "string"
-          ? (payload as { rentalId: string }).rentalId
+      const record =
+        payload && typeof payload === "object"
+          ? (payload as {
+              rentalId?: unknown;
+              verification?: LiveSyncVerificationPatch | null;
+            })
           : null;
-      bump(rentalId);
+      const rentalId =
+        record && typeof record.rentalId === "string" ? record.rentalId : null;
+      const verification =
+        record?.verification && typeof record.verification === "object"
+          ? record.verification
+          : undefined;
+      bump(rentalId, { immediate: Boolean(rentalId), verification });
     });
     broadcastChannel.subscribe();
 

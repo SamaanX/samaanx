@@ -1,9 +1,11 @@
+import type { LiveSyncVerificationPatch } from "@/features/realtime/verification-sync";
 import { logger } from "@/lib/logger";
 import { postSupabaseBroadcast } from "@/lib/realtime/supabase-broadcast";
 
 type LiveSyncPayload = {
   at: string;
   rentalId?: string | null;
+  verification?: LiveSyncVerificationPatch | null;
 };
 
 /**
@@ -13,7 +15,10 @@ type LiveSyncPayload = {
  */
 export async function wakeUsersLiveSync(
   userIds: Array<string | null | undefined>,
-  options?: { rentalId?: string | null },
+  options?: {
+    rentalId?: string | null;
+    verification?: LiveSyncVerificationPatch;
+  },
 ): Promise<void> {
   const unique = [...new Set(userIds.filter(Boolean) as string[])];
   if (unique.length === 0) return;
@@ -21,6 +26,7 @@ export async function wakeUsersLiveSync(
   const payload: LiveSyncPayload = {
     at: new Date().toISOString(),
     rentalId: options?.rentalId ?? null,
+    verification: options?.verification ?? null,
   };
 
   const messages = unique.map((userId) => ({

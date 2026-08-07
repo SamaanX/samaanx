@@ -15,6 +15,13 @@ export type VerificationActionError = {
 export type VerificationActionResult<T> =
   { ok: true; data: T } | { ok: false; error: VerificationActionError };
 
+export type ConfirmStageResult = {
+  bothConfirmed: boolean;
+  nextStatus: string;
+  buyerConfirmed: boolean;
+  sellerConfirmed: boolean;
+};
+
 export type VerificationStatusView = {
   rentalId: string;
   listingTitle: string;

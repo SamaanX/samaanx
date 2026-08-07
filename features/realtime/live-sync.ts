@@ -1,9 +1,20 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import {
+  dispatchVerificationSync,
+  type LiveSyncVerificationPatch,
+} from "@/features/realtime/verification-sync";
 import { queryKeys } from "@/lib/query-keys";
 import { createClient } from "@/lib/supabase/client";
 
+export type { LiveSyncVerificationPatch } from "@/features/realtime/verification-sync";
+
 export const LIVE_SYNC_EVENT = "samaanx:live-sync";
+
+type BumpOptions = {
+  rentalId?: string | null;
+  verification?: LiveSyncVerificationPatch;
+};
 
 export type LiveSurface =
   | "rentals"
@@ -28,8 +39,15 @@ const DEFAULT_SURFACES: LiveSurface[] = [
 export function bumpLiveSurfaces(
   queryClient: QueryClient,
   surfaces: LiveSurface[] = DEFAULT_SURFACES,
+  bumpOptions?: BumpOptions,
 ): void {
   const set = new Set(surfaces);
+  const rentalId = bumpOptions?.rentalId ?? null;
+  const verification = bumpOptions?.verification;
+
+  if (verification && rentalId) {
+    dispatchVerificationSync(rentalId, verification);
+  }
 
   if (process.env.NODE_ENV === "development") {
     console.warn(
@@ -90,7 +108,7 @@ export function bumpLiveSurfaces(
     window.dispatchEvent(new CustomEvent(LIVE_SYNC_EVENT));
     window.dispatchEvent(
       new CustomEvent("samaanx:rental-sync", {
-        detail: { rentalId: null },
+        detail: { rentalId },
       }),
     );
   }
@@ -102,7 +120,10 @@ export function bumpLiveSurfaces(
  */
 export async function notifyUsersLiveSync(
   userIds: Array<string | null | undefined>,
-  options?: { rentalId?: string | null },
+  options?: {
+    rentalId?: string | null;
+    verification?: LiveSyncVerificationPatch;
+  },
 ): Promise<void> {
   const unique = [...new Set(userIds.filter(Boolean) as string[])];
   if (unique.length === 0) return;
@@ -111,6 +132,7 @@ export async function notifyUsersLiveSync(
   const payload = {
     at: new Date().toISOString(),
     rentalId: options?.rentalId ?? null,
+    verification: options?.verification ?? null,
   };
 
   await Promise.all(
@@ -152,8 +174,18 @@ export async function notifyUsersLiveSync(
 export function afterLiveMutation(
   queryClient: QueryClient,
   peerUserIds: Array<string | null | undefined>,
-  options?: { rentalId?: string | null; surfaces?: LiveSurface[] },
+  options?: {
+    rentalId?: string | null;
+    surfaces?: LiveSurface[];
+    verification?: LiveSyncVerificationPatch;
+  },
 ): void {
-  bumpLiveSurfaces(queryClient, options?.surfaces);
-  void notifyUsersLiveSync(peerUserIds, options);
+  bumpLiveSurfaces(queryClient, options?.surfaces, {
+    rentalId: options?.rentalId,
+    verification: options?.verification,
+  });
+  void notifyUsersLiveSync(peerUserIds, {
+    rentalId: options?.rentalId,
+    verification: options?.verification,
+  });
 }

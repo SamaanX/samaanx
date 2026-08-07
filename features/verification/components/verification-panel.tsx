@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { afterLiveMutation } from "@/features/realtime/live-sync";
+import {
+  type LiveSyncVerificationPatch,
+  mergeVerificationLivePatch,
+  VERIFICATION_SYNC_EVENT,
+  type VerificationSyncEventDetail,
+} from "@/features/realtime/verification-sync";
 import { ReportDialog } from "@/features/reports/components/report-dialog";
 import {
   confirmStageAction,
@@ -39,6 +45,30 @@ type VerificationPanelProps = {
   stage: "HANDOVER" | "RETURN";
 };
 
+function patchVerificationStatus(
+  queryClient: ReturnType<typeof useQueryClient>,
+  rentalId: string,
+  stage: "HANDOVER" | "RETURN",
+  patch: Partial<VerificationStatusView>,
+) {
+  queryClient.setQueryData<VerificationStatusView>(
+    queryKeys.verification.status(rentalId, stage),
+    (old) => (old ? { ...old, ...patch } : old),
+  );
+}
+
+function applyLiveVerificationPatch(
+  queryClient: ReturnType<typeof useQueryClient>,
+  rentalId: string,
+  stage: "HANDOVER" | "RETURN",
+  patch: LiveSyncVerificationPatch,
+) {
+  queryClient.setQueryData<VerificationStatusView>(
+    queryKeys.verification.status(rentalId, stage),
+    (old) => (old ? mergeVerificationLivePatch(old, patch) : old),
+  );
+}
+
 export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -61,8 +91,7 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
     },
     initialData: initial,
     initialDataUpdatedAt: initialUpdatedAtRef.current,
-    // Live sync invalidates verification keys; avoid mount double-fetch.
-    staleTime: 15_000,
+    staleTime: 0,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
@@ -70,9 +99,39 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
 
   const status = statusQuery.data ?? initial;
 
+  const fetchLatestStatus = React.useCallback(async () => {
+    await queryClient.fetchQuery({
+      queryKey: queryKeys.verification.status(initial.rentalId, stage),
+      queryFn: async () => {
+        const result = await getVerificationStatusAction({
+          rentalId: initial.rentalId,
+          stage,
+        });
+        if (!result.ok) throw new Error(result.error.message);
+        return result.data;
+      },
+      staleTime: 0,
+    });
+  }, [initial.rentalId, queryClient, stage]);
+
   const refreshStatus = React.useCallback(async () => {
-    await statusQuery.refetch();
-  }, [statusQuery]);
+    await fetchLatestStatus();
+  }, [fetchLatestStatus]);
+
+  React.useEffect(() => {
+    function onVerificationSync(event: Event) {
+      const detail = (event as CustomEvent<VerificationSyncEventDetail>).detail;
+      if (detail.rentalId !== initial.rentalId || detail.stage !== stage)
+        return;
+      applyLiveVerificationPatch(queryClient, initial.rentalId, stage, detail);
+      void fetchLatestStatus();
+    }
+
+    window.addEventListener(VERIFICATION_SYNC_EVENT, onVerificationSync);
+    return () => {
+      window.removeEventListener(VERIFICATION_SYNC_EVENT, onVerificationSync);
+    };
+  }, [fetchLatestStatus, initial.rentalId, queryClient, stage]);
 
   useRealtimeRentalSync(
     React.useCallback(() => {
@@ -85,22 +144,45 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
     action: () => Promise<
       { ok: true; data: T } | { ok: false; error: { message: string } }
     >,
-    onOk?: (data: T) => void,
+    options?: {
+      onOk?: (data: T) => void;
+      patch?: (
+        data: T,
+        current: VerificationStatusView,
+      ) => Partial<VerificationStatusView>;
+      liveSync?: (
+        data: T,
+        current: VerificationStatusView,
+      ) => LiveSyncVerificationPatch | undefined;
+    },
   ) {
     setError(null);
     setMessage(null);
     setBusy(true);
     const result = await action();
-    setBusy(false);
     if (!result.ok) {
+      setBusy(false);
       setError(result.error.message);
       return;
     }
-    onOk?.(result.data);
-    await refreshStatus();
+
+    if (options?.patch) {
+      patchVerificationStatus(
+        queryClient,
+        status.rentalId,
+        stage,
+        options.patch(result.data, status),
+      );
+    }
+
+    options?.onOk?.(result.data);
+    setBusy(false);
+
     afterLiveMutation(queryClient, [status.peerUserId], {
       rentalId: status.rentalId,
+      verification: options?.liveSync?.(result.data, status),
     });
+    void fetchLatestStatus();
   }
 
   const stageLabel = stage === "HANDOVER" ? "Handover" : "Return";
@@ -331,21 +413,41 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
                       rentalId: status.rentalId,
                       stage,
                     }),
-                  (data) => {
-                    if (data.bothConfirmed) {
-                      setMessage(`${stageLabel} fully completed.`);
-                      if (stage === "RETURN") {
-                        trackEvent("rental_completed", {
-                          rental_id: status.rentalId,
-                        });
+                  {
+                    patch: (data) => ({
+                      youConfirmed: true,
+                      canConfirm: false,
+                      buyerConfirmed: data.buyerConfirmed,
+                      sellerConfirmed: data.sellerConfirmed,
+                      bothConfirmed: data.bothConfirmed,
+                      rentalStatus: data.nextStatus,
+                      ...(data.bothConfirmed
+                        ? { confirmationCompletedAt: new Date().toISOString() }
+                        : {}),
+                    }),
+                    liveSync: (data) => ({
+                      stage,
+                      buyerConfirmed: data.buyerConfirmed,
+                      sellerConfirmed: data.sellerConfirmed,
+                      bothConfirmed: data.bothConfirmed,
+                      rentalStatus: data.nextStatus,
+                    }),
+                    onOk: (data) => {
+                      if (data.bothConfirmed) {
+                        setMessage(`${stageLabel} fully completed.`);
+                        if (stage === "RETURN") {
+                          trackEvent("rental_completed", {
+                            rental_id: status.rentalId,
+                          });
+                        }
+                      } else {
+                        setMessage(
+                          isReturn && status.role === "buyer"
+                            ? "Waiting for seller confirmation…"
+                            : "Your confirmation was saved.",
+                        );
                       }
-                    } else {
-                      setMessage(
-                        isReturn && status.role === "buyer"
-                          ? "Waiting for seller confirmation…"
-                          : "Your confirmation was saved.",
-                      );
-                    }
+                    },
                   },
                 )
               }
@@ -501,12 +603,33 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
           className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
-            void run(() =>
-              verifyPinAction({
-                rentalId: status.rentalId,
-                stage,
-                pin: pinInput,
-              }),
+            void run(
+              () =>
+                verifyPinAction({
+                  rentalId: status.rentalId,
+                  stage,
+                  pin: pinInput,
+                }),
+              {
+                patch: () => ({
+                  isVerified: true,
+                  canVerify: false,
+                  canConfirm: true,
+                  canRegenerate: false,
+                  qrPayload: null,
+                  pin: null,
+                  verifiedAt: new Date().toISOString(),
+                  verifiedMethod: "PIN",
+                }),
+                liveSync: () => ({
+                  stage,
+                  isVerified: true,
+                  canVerify: false,
+                  verifiedMethod: "PIN",
+                  rentalStatus:
+                    stage === "RETURN" ? "RETURN_PENDING" : status.rentalStatus,
+                }),
+              },
             );
           }}
         >
@@ -551,12 +674,33 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
             event.preventDefault();
             const payload = qrInput.trim();
             if (!payload) return;
-            void run(() =>
-              verifyQrAction({
-                rentalId: status.rentalId,
-                stage,
-                qrPayload: payload,
-              }),
+            void run(
+              () =>
+                verifyQrAction({
+                  rentalId: status.rentalId,
+                  stage,
+                  qrPayload: payload,
+                }),
+              {
+                patch: () => ({
+                  isVerified: true,
+                  canVerify: false,
+                  canConfirm: true,
+                  canRegenerate: false,
+                  qrPayload: null,
+                  pin: null,
+                  verifiedAt: new Date().toISOString(),
+                  verifiedMethod: "QR",
+                }),
+                liveSync: () => ({
+                  stage,
+                  isVerified: true,
+                  canVerify: false,
+                  verifiedMethod: "QR",
+                  rentalStatus:
+                    stage === "RETURN" ? "RETURN_PENDING" : status.rentalStatus,
+                }),
+              },
             );
           }}
         >
