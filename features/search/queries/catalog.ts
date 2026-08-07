@@ -59,6 +59,7 @@ function cardSelect(wishlistUserId: string | null) {
     area: true,
     lat: true,
     lng: true,
+    showExactPickup: true,
     status: true,
     rentPriceAmount: true,
     rentPriceUnit: true,

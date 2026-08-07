@@ -1,9 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import * as React from "react";
 
-import { Button } from "@/components/ui/button";
 import type { PublicLocationPrecision } from "@/lib/geo/coordinates";
 
 const ListingMap = dynamic(
@@ -12,7 +10,7 @@ const ListingMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="border-border text-muted-foreground flex h-52 items-center justify-center rounded-2xl border border-dashed text-sm">
+      <div className="border-border text-muted-foreground flex h-52 items-center justify-center rounded-2xl border border-dashed text-sm sm:h-60">
         Loading map…
       </div>
     ),
@@ -20,29 +18,13 @@ const ListingMap = dynamic(
 );
 
 type LazyListingMapProps = {
-  apiKey: string;
   lat: number;
   lng: number;
   precision: PublicLocationPrecision;
   title: string;
 };
 
-/** Gate Maps JS until buyer opens the map. */
+/** Lazy-load Leaflet for listing detail pages. */
 export function LazyListingMap(props: LazyListingMapProps) {
-  const [open, setOpen] = React.useState(false);
-
-  if (!open) {
-    return (
-      <Button
-        type="button"
-        variant="outline"
-        className="w-full"
-        onClick={() => setOpen(true)}
-      >
-        View on map
-      </Button>
-    );
-  }
-
   return <ListingMap {...props} />;
 }

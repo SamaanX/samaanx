@@ -358,3 +358,23 @@
     box-shadow: var(--rp-shadow-xs);
   }
 }
+
+/* Leaflet — keep maps contained and touch-friendly */
+.leaflet-container {
+  z-index: 0;
+  width: 100%;
+  font: inherit;
+}
+
+.leaflet-pane {
+  z-index: 1;
+}
+
+.leaflet-control {
+  z-index: 2;
+}
+
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 2;
+}

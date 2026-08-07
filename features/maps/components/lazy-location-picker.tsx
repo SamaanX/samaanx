@@ -13,7 +13,7 @@ const LocationPicker = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="border-border text-muted-foreground flex h-56 items-center justify-center rounded-xl border border-dashed text-sm">
+      <div className="border-border text-muted-foreground flex h-56 items-center justify-center rounded-xl border border-dashed text-sm sm:h-64">
         Loading map…
       </div>
     ),
@@ -21,15 +21,26 @@ const LocationPicker = dynamic(
 );
 
 type LazyLocationPickerProps = {
-  apiKey: string;
   lat: number;
   lng: number;
-  onChange: (coords: { lat: number; lng: number }) => void;
+  addressHint?: string;
+  initialOpen?: boolean;
+  onChange: (value: {
+    lat: number;
+    lng: number;
+    city?: string;
+    area?: string;
+    countryCode?: string;
+    formattedAddress?: string;
+  }) => void;
 };
 
-/** Gate Maps JS until seller clicks — keeps listing form initial JS small. */
-export function LazyLocationPicker(props: LazyLocationPickerProps) {
-  const [open, setOpen] = React.useState(false);
+/** Gate Leaflet until seller opens the map — keeps listing form initial JS small. */
+export function LazyLocationPicker({
+  initialOpen = false,
+  ...props
+}: LazyLocationPickerProps) {
+  const [open, setOpen] = React.useState(initialOpen);
 
   if (!open) {
     return (

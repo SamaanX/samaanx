@@ -27,6 +27,10 @@ export type PublicListingCardView = {
   isWishlisted: boolean;
   availabilityLabel: "Available" | "Limited" | "Check dates" | "Unavailable";
   publishedAt: string | null;
+  /** Public map coordinates (privacy-aware). */
+  lat: number;
+  lng: number;
+  locationPrecision: PublicLocationPrecision;
   /** Server-computed from true coords; null when no viewer location. */
   distanceKm: number | null;
   status: "ACTIVE" | "INACTIVE";

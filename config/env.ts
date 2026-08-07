@@ -18,7 +18,7 @@ const serverEnvSchema = publicEnvSchema.extend({
   CRON_SECRET: z.string().optional(),
   VERIFICATION_HMAC_SECRET: z.string().optional(),
   SUPER_ADMIN_EMAIL: z.string().email().optional(),
-  NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: z.string().optional(),
+  NEXT_PUBLIC_GEOAPIFY_API_KEY: z.string().optional(),
   NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().optional(),
 });
 
@@ -72,8 +72,7 @@ export function getServerEnv(): ServerEnv {
     CRON_SECRET: process.env.CRON_SECRET,
     VERIFICATION_HMAC_SECRET: process.env.VERIFICATION_HMAC_SECRET,
     SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL,
-    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:
-      process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
+    NEXT_PUBLIC_GEOAPIFY_API_KEY: process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   });
 

@@ -28,6 +28,7 @@ type CardListing = {
   publishedAt: Date | null;
   lat?: number;
   lng?: number;
+  showExactPickup?: boolean;
   status?: Listing["status"];
   category: Pick<Category, "name" | "slug">;
   images: Pick<ListingImage, "url" | "sortOrder">[];
@@ -152,6 +153,24 @@ export function toPublicListingCardView(
     );
   }
 
+  let mapLat = 0;
+  let mapLng = 0;
+  let locationPrecision: PublicListingCardView["locationPrecision"] =
+    "approximate";
+
+  if (typeof listing.lat === "number" && typeof listing.lng === "number") {
+    const publicCoords = resolvePublicCoordinates({
+      lat: listing.lat,
+      lng: listing.lng,
+      listingId: listing.id,
+      showExactPickup: listing.showExactPickup ?? false,
+      isOwner: false,
+    });
+    mapLat = publicCoords.lat;
+    mapLng = publicCoords.lng;
+    locationPrecision = publicCoords.precision;
+  }
+
   return {
     id: listing.id,
     slug: listing.slug,
@@ -160,6 +179,9 @@ export function toPublicListingCardView(
     categorySlug: listing.category.slug,
     city: listing.city,
     area: listing.area,
+    lat: mapLat,
+    lng: mapLng,
+    locationPrecision,
     rentPriceAmount: Number(listing.rentPriceAmount),
     rentPriceUnit: listing.rentPriceUnit,
     currency: listing.currency,

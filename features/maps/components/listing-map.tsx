@@ -1,12 +1,17 @@
 "use client";
 
-import * as React from "react";
+import Link from "next/link";
 
+import {
+  ApproximateArea,
+  MapShell,
+  resolveMapCenter,
+  StaticMarker,
+} from "@/features/maps/components/map-shell";
 import type { PublicLocationPrecision } from "@/lib/geo/coordinates";
-import { loadGoogleMaps } from "@/lib/maps/load-google-maps";
+import { buildOpenStreetMapUrl } from "@/lib/geoapify/client";
 
 type ListingMapProps = {
-  apiKey: string;
   lat: number;
   lng: number;
   precision: PublicLocationPrecision;
@@ -14,92 +19,51 @@ type ListingMapProps = {
 };
 
 /**
- * Buyer map — exact marker or approximate circle. Lazy-loaded by parent.
+ * Buyer listing map — exact marker or approximate circle on OpenStreetMap tiles.
  */
-export function ListingMap({
-  apiKey,
-  lat,
-  lng,
-  precision,
-  title,
-}: ListingMapProps) {
-  const mapRef = React.useRef<HTMLDivElement | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        if (!apiKey) {
-          setError("Map unavailable.");
-          return;
-        }
-        const g = await loadGoogleMaps(apiKey);
-        if (cancelled || !mapRef.current) return;
-
-        const center = { lat, lng };
-        const map = new g.maps.Map(mapRef.current, {
-          center,
-          zoom: precision === "exact" ? 15 : 14,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          styles: [
-            { featureType: "poi", stylers: [{ visibility: "off" }] },
-            { featureType: "water", stylers: [{ color: "#d6eaf8" }] },
-          ],
-        });
-
-        if (precision === "exact") {
-          new g.maps.Marker({
-            map,
-            position: center,
-            title,
-          });
-        } else {
-          new g.maps.Circle({
-            map,
-            center,
-            radius: 400,
-            fillColor: "#0B6E4F",
-            fillOpacity: 0.18,
-            strokeColor: "#0B6E4F",
-            strokeOpacity: 0.55,
-            strokeWeight: 2,
-          });
-        }
-      } catch {
-        setError("Could not load map.");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [apiKey, lat, lng, precision, title]);
+export function ListingMap({ lat, lng, precision, title }: ListingMapProps) {
+  const center = resolveMapCenter(lat, lng);
+  const osmUrl = buildOpenStreetMapUrl(center.lat, center.lng);
 
   return (
-    <div className="space-y-2">
-      <div
-        ref={mapRef}
-        className="border-border bg-muted h-52 w-full overflow-hidden rounded-2xl border"
-        aria-label={
+    <div className="space-y-3">
+      <MapShell
+        center={center}
+        zoom={precision === "exact" ? 15 : 14}
+        className="h-52 sm:h-60"
+        ariaLabel={
           precision === "exact"
             ? "Exact pickup location"
             : "Approximate pickup area"
         }
-      />
-      <p className="text-muted-foreground text-xs">
-        {precision === "exact"
-          ? "Exact pickup location shown by the seller."
-          : "Approximate area (~400m). Exact pin is hidden for privacy."}
-      </p>
-      {error ? (
-        <p className="text-destructive text-xs" role="alert">
-          {error}
+        scrollWheelZoom={false}
+      >
+        {precision === "exact" ? (
+          <StaticMarker
+            position={center}
+            title={title}
+            popup={<span className="text-sm font-medium">{title}</span>}
+          />
+        ) : (
+          <ApproximateArea center={center} />
+        )}
+      </MapShell>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-muted-foreground text-xs">
+          {precision === "exact"
+            ? "Exact pickup location shown by the seller."
+            : "Approximate area (~400m). Exact pin is hidden for privacy."}
         </p>
-      ) : null}
+        <Link
+          href={osmUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="border-input bg-background hover:bg-muted inline-flex h-8 items-center justify-center rounded-xl border px-3 text-sm font-medium transition-colors"
+        >
+          Open in OpenStreetMap
+        </Link>
+      </div>
     </div>
   );
 }

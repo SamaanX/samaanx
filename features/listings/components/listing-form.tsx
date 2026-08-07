@@ -44,18 +44,18 @@ import { cn } from "@/lib/utils";
 function LazyLocationPickerGate(props: {
   lat: number;
   lng: number;
-  onChange: (coords: { lat: number; lng: number }) => void;
+  initialOpen?: boolean;
+  addressHint?: string;
+  onChange: (value: {
+    lat: number;
+    lng: number;
+    city?: string;
+    area?: string;
+    countryCode?: string;
+    formattedAddress?: string;
+  }) => void;
 }) {
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-  if (!apiKey) {
-    return (
-      <p className="border-border text-muted-foreground rounded-xl border border-dashed px-3 py-2 text-xs">
-        Map picker unavailable — set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.
-        Coordinates can still be entered manually.
-      </p>
-    );
-  }
-  return <LazyLocationPicker apiKey={apiKey} {...props} />;
+  return <LazyLocationPicker {...props} />;
 }
 
 type ListingFormProps = {
@@ -554,17 +554,39 @@ export function ListingForm({
       </div>
 
       <LazyLocationPickerGate
+        initialOpen={mode === "edit"}
         lat={Number(watch("lat")) || 24.8607}
         lng={Number(watch("lng")) || 67.0011}
-        onChange={(coords) => {
-          setValue("lat", coords.lat, {
+        addressHint={
+          [watch("area"), watch("city")].filter(Boolean).join(", ") || undefined
+        }
+        onChange={(value) => {
+          setValue("lat", value.lat, {
             shouldDirty: true,
             shouldValidate: true,
           });
-          setValue("lng", coords.lng, {
+          setValue("lng", value.lng, {
             shouldDirty: true,
             shouldValidate: true,
           });
+          if (value.city) {
+            setValue("city", value.city, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+          }
+          if (value.area) {
+            setValue("area", value.area, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+          }
+          if (value.countryCode) {
+            setValue("countryCode", value.countryCode, {
+              shouldDirty: true,
+              shouldValidate: true,
+            });
+          }
         }}
       />
 

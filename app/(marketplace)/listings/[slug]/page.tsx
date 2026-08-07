@@ -218,7 +218,6 @@ export default async function ListingDetailPage({
                   : " · exact pickup"}
               </p>
               <LazyListingMap
-                apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ""}
                 lat={listing.lat}
                 lng={listing.lng}
                 precision={listing.locationPrecision}

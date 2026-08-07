@@ -3,93 +3,117 @@
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
-import { loadGoogleMaps } from "@/lib/maps/load-google-maps";
+import { AddressAutocomplete } from "@/features/maps/components/address-autocomplete";
+import {
+  DraggableMarker,
+  MapClickHandler,
+  MapShell,
+  resolveMapCenter,
+} from "@/features/maps/components/map-shell";
+import type { LatLng } from "@/lib/geo/coordinates";
+import { reverseGeocode } from "@/lib/geoapify/client";
+import type { ParsedGeoAddress } from "@/lib/geoapify/types";
 
-type LocationPickerProps = {
-  apiKey: string;
+export type LocationPickerValue = {
   lat: number;
   lng: number;
-  onChange: (coords: { lat: number; lng: number }) => void;
+  city?: string;
+  area?: string;
+  countryCode?: string;
+  formattedAddress?: string;
+};
+
+type LocationPickerProps = {
+  lat: number;
+  lng: number;
+  addressHint?: string;
+  onChange: (value: LocationPickerValue) => void;
 };
 
 /**
- * Seller map picker — loaded only when this component mounts (dynamic import parent).
+ * Seller map picker — OpenStreetMap tiles + Geoapify geocoding.
  */
 export function LocationPicker({
-  apiKey,
   lat,
   lng,
+  addressHint = "",
   onChange,
 }: LocationPickerProps) {
-  const mapRef = React.useRef<HTMLDivElement | null>(null);
-  const markerRef = React.useRef<google.maps.Marker | null>(null);
+  const [position, setPosition] = React.useState<LatLng>(() =>
+    resolveMapCenter(lat, lng),
+  );
+  const [searchLabel, setSearchLabel] = React.useState(addressHint);
   const [error, setError] = React.useState<string | null>(null);
-  const [ready, setReady] = React.useState(false);
+  const [reverseBusy, setReverseBusy] = React.useState(false);
+  const reverseAbortRef = React.useRef<AbortController | null>(null);
+  const reverseDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   React.useEffect(() => {
-    let cancelled = false;
-    let map: google.maps.Map | null = null;
+    setPosition(resolveMapCenter(lat, lng));
+  }, [lat, lng]);
 
-    void (async () => {
-      try {
-        if (!apiKey) {
-          setError("Google Maps API key is not configured.");
-          return;
-        }
-        const g = await loadGoogleMaps(apiKey);
-        if (cancelled || !mapRef.current) return;
+  React.useEffect(() => {
+    setSearchLabel(addressHint);
+  }, [addressHint]);
 
-        map = new g.maps.Map(mapRef.current, {
-          center: { lat, lng },
-          zoom: 14,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          styles: [
-            { featureType: "poi", stylers: [{ visibility: "off" }] },
-            {
-              featureType: "water",
-              stylers: [{ color: "#d6eaf8" }],
-            },
-          ],
-        });
-
-        markerRef.current = new g.maps.Marker({
-          map,
-          position: { lat, lng },
-          draggable: true,
-        });
-
-        map.addListener("click", (event: google.maps.MapMouseEvent) => {
-          const position = event.latLng;
-          if (!position) return;
-          const next = { lat: position.lat(), lng: position.lng() };
-          markerRef.current?.setPosition(next);
-          onChange(next);
-        });
-
-        markerRef.current.addListener("dragend", () => {
-          const position = markerRef.current?.getPosition();
-          if (!position) return;
-          onChange({ lat: position.lat(), lng: position.lng() });
-        });
-
-        setReady(true);
-      } catch {
-        setError(
-          "Could not load map. You can still enter coordinates manually.",
-        );
-      }
-    })();
-
+  React.useEffect(() => {
     return () => {
-      cancelled = true;
-      markerRef.current?.setMap(null);
-      markerRef.current = null;
+      reverseAbortRef.current?.abort();
+      if (reverseDebounceRef.current) clearTimeout(reverseDebounceRef.current);
     };
-    // Mount once — parent updates lat/lng via controlled inputs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey]);
+  }, []);
+
+  function applyAddress(address: ParsedGeoAddress) {
+    const next = { lat: address.lat, lng: address.lng };
+    setPosition(next);
+    setSearchLabel(address.formattedAddress);
+    onChange({
+      ...next,
+      city: address.city,
+      area: address.area,
+      countryCode: address.countryCode,
+      formattedAddress: address.formattedAddress,
+    });
+  }
+
+  function scheduleReverseGeocode(next: LatLng) {
+    if (reverseDebounceRef.current) clearTimeout(reverseDebounceRef.current);
+    reverseDebounceRef.current = setTimeout(() => {
+      reverseAbortRef.current?.abort();
+      const controller = new AbortController();
+      reverseAbortRef.current = controller;
+      setReverseBusy(true);
+      void reverseGeocode(next.lat, next.lng, { signal: controller.signal })
+        .then((address) => {
+          if (!address || controller.signal.aborted) return;
+          setSearchLabel(address.formattedAddress);
+          onChange({
+            lat: next.lat,
+            lng: next.lng,
+            city: address.city,
+            area: address.area,
+            countryCode: address.countryCode,
+            formattedAddress: address.formattedAddress,
+          });
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) {
+            onChange({ lat: next.lat, lng: next.lng });
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setReverseBusy(false);
+        });
+    }, 350);
+  }
+
+  function updatePosition(next: LatLng) {
+    setPosition(next);
+    setError(null);
+    scheduleReverseGeocode(next);
+  }
 
   function useMyLocation() {
     if (!navigator.geolocation) {
@@ -98,13 +122,10 @@ export function LocationPicker({
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const next = {
+        updatePosition({
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-        };
-        onChange(next);
-        markerRef.current?.setPosition(next);
-        setError(null);
+        });
       },
       () => setError("Location permission denied."),
       { enableHighAccuracy: true, timeout: 10_000 },
@@ -112,7 +133,13 @@ export function LocationPicker({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <AddressAutocomplete
+        value={searchLabel}
+        onSelect={applyAddress}
+        disabled={reverseBusy}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">Pickup location on map</p>
         <Button
@@ -124,23 +151,34 @@ export function LocationPicker({
           Use my location
         </Button>
       </div>
-      <div
-        ref={mapRef}
-        className="border-border bg-muted h-56 w-full overflow-hidden rounded-xl border"
-        aria-label="Map to choose pickup location"
-      />
-      {!ready && !error ? (
-        <p className="text-muted-foreground text-xs">Loading map…</p>
-      ) : null}
+
+      <MapShell
+        center={position}
+        zoom={14}
+        className="h-56 sm:h-64"
+        ariaLabel="Map to choose pickup location"
+        scrollWheelZoom
+      >
+        <DraggableMarker position={position} onChange={updatePosition} />
+        <MapClickHandler onClick={updatePosition} />
+      </MapShell>
+
+      {reverseBusy ? (
+        <p className="text-muted-foreground text-xs" aria-live="polite">
+          Updating address…
+        </p>
+      ) : (
+        <p className="text-muted-foreground text-xs">
+          Tap the map, drag the pin, or search above. Coordinates are stored
+          securely.
+        </p>
+      )}
+
       {error ? (
         <p className="text-destructive text-xs" role="alert">
           {error}
         </p>
-      ) : (
-        <p className="text-muted-foreground text-xs">
-          Tap the map or drag the pin. Exact coordinates are stored securely.
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
