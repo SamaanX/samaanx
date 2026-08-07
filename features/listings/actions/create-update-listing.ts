@@ -478,6 +478,7 @@ export async function updateListingAction(
     timeline.mark("Reload listing for response");
 
     scheduleSellerListingRevalidation(timeline);
+    scheduleLiveSyncAfterResponse([profile.id]);
     timeline.done("updateListingAction");
     return { ok: true, data: toSellerListingDetailView(updated) };
   } catch (error) {

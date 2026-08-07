@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 import { useFieldArray, useForm } from "react-hook-form";
@@ -15,6 +16,7 @@ import {
   rollbackListingDraftAction,
   updateListingAction,
 } from "@/features/listings/actions";
+import { getSellerListingsAction } from "@/features/listings/actions/get-seller-listings";
 import {
   FieldError,
   FormMessage,
@@ -38,8 +40,12 @@ import type {
   SellerListingDetailView,
 } from "@/features/listings/types/listing";
 import { LazyLocationPicker } from "@/features/maps/components/lazy-location-picker";
+import { afterLiveMutation } from "@/features/realtime/live-sync";
 import { trackEvent } from "@/lib/analytics/events";
+import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
+
+const SELLER_LISTINGS_HREF = "/seller/listings";
 
 function LazyLocationPickerGate(props: {
   lat: number;
@@ -156,6 +162,7 @@ export function ListingForm({
   defaultLng,
 }: ListingFormProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [images, setImages] = React.useState<DraftListingImage[]>(() =>
     (listing?.images ?? []).map((image) => ({
       key: image.id,
@@ -195,6 +202,25 @@ export function ListingForm({
   const status = watch("status");
   const description = watch("description");
   const title = watch("title");
+
+  React.useEffect(() => {
+    router.prefetch(SELLER_LISTINGS_HREF);
+  }, [router]);
+
+  async function goToMyListings() {
+    afterLiveMutation(queryClient, [], { surfaces: ["sellerListings"] });
+    await queryClient.fetchQuery({
+      queryKey: queryKeys.sellerListings.list(),
+      queryFn: async () => {
+        const result = await getSellerListingsAction();
+        if (!result.ok) throw new Error(result.error.message);
+        return result.data;
+      },
+      staleTime: 0,
+    });
+    router.replace(SELLER_LISTINGS_HREF);
+    router.refresh();
+  }
 
   async function onSubmit(values: ListingFormValues) {
     setFormError(null);
@@ -269,7 +295,7 @@ export function ListingForm({
           current.map((image) => ({ ...image, progress: 100 })),
         );
         trackEvent("create_listing", { listing_id: registered.data.id });
-        router.replace(`/seller/listings/${registered.data.id}/edit`);
+        await goToMyListings();
         return;
       }
 
@@ -326,10 +352,8 @@ export function ListingForm({
         return;
       }
 
-      setImages((current) =>
-        current.map((image) => ({ ...image, progress: 100 })),
-      );
-      setSuccess("Listing updated.");
+      await goToMyListings();
+      return;
     } finally {
       setUploading(false);
     }

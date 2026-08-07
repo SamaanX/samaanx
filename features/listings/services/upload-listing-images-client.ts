@@ -12,7 +12,7 @@ import {
 } from "@/features/listings/services/listing-image-storage";
 import { createClient } from "@/lib/supabase/client";
 
-const UPLOAD_CONCURRENCY = 3;
+const UPLOAD_CONCURRENCY = 5;
 
 function resolveListingMime(file: File): string {
   if (file.type && isAllowedListingImageMime(file.type)) {
