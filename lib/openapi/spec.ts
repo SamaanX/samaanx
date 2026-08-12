@@ -19,6 +19,7 @@ export const openApiSpec = {
     { name: "Listings", description: "Browse and search listings" },
     { name: "Seller", description: "Seller listing management" },
     { name: "Wishlist", description: "Saved listings (favorites)" },
+    { name: "AI", description: "SamaanX AI rental assistant" },
     { name: "Jobs", description: "Background cron jobs" },
     { name: "Testing", description: "Development-only utilities" },
   ],
@@ -578,6 +579,82 @@ export const openApiSpec = {
         responses: {
           "500": { description: "Intentional test error" },
           "404": { description: "Disabled in production" },
+        },
+      },
+    },
+    "/api/ai/chat": {
+      post: {
+        tags: ["AI"],
+        summary: "Chat with SamaanX AI Rental Assistant",
+        description:
+          "Uses Google Gemini with live SamaanX listing data grounding. Public endpoint — no authentication required.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["message"],
+                properties: {
+                  message: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 1000,
+                    example: "I need a camera for a wedding under Rs. 5000",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "AI assistant reply",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean", example: true },
+                    data: {
+                      type: "object",
+                      properties: {
+                        message: {
+                          type: "string",
+                          example:
+                            "I found a suitable camera on SamaanX that may fit your budget…",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "400": {
+            description: "Validation error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ApiError" },
+              },
+            },
+          },
+          "503": {
+            description: "AI service unavailable or not configured",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ApiError" },
+              },
+            },
+          },
+          "500": {
+            description: "Unexpected server error",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/ApiError" },
+              },
+            },
+          },
         },
       },
     },
