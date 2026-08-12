@@ -181,7 +181,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
               >
                 <div
                   className={cn(
-                    "max-w-[88%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
+                    "max-w-[88%] rounded-2xl px-3 py-2.5 text-sm leading-relaxed break-words whitespace-pre-wrap",
                     message.role === "user"
                       ? "bg-brand-blue text-white"
                       : "bg-muted/70 text-foreground border-border/60 border",
