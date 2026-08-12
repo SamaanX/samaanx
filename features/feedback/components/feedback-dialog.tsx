@@ -2,6 +2,7 @@
 
 import { MessageSquareHeart, X } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { FeedbackForm } from "@/features/feedback/components/feedback-form";
@@ -23,6 +24,11 @@ export function FeedbackDialog({
   iconOnly = false,
 }: FeedbackDialogProps) {
   const [open, setOpen] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   React.useEffect(() => {
     if (!open) return;
@@ -30,8 +36,64 @@ export function FeedbackDialog({
       if (e.key === "Escape") setOpen(false);
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
   }, [open]);
+
+  const dialog =
+    open && mounted ? (
+      <div className="fixed inset-0 z-[100]">
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/40"
+          aria-label="Close feedback dialog"
+          onClick={() => setOpen(false)}
+        />
+        <div className="pointer-events-none fixed inset-0 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 sm:items-center sm:p-6">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="feedback-dialog-title"
+              className="border-border/80 bg-card pointer-events-auto relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border shadow-[var(--rp-shadow-md)] sm:rounded-2xl"
+              style={{ maxHeight: "min(92dvh, 720px)" }}
+            >
+              <div className="border-border/60 flex shrink-0 items-center justify-between border-b px-4 py-3">
+                <div>
+                  <h2
+                    id="feedback-dialog-title"
+                    className="text-base font-semibold tracking-tight"
+                  >
+                    Send feedback
+                  </h2>
+                  <p className="text-muted-foreground text-xs">
+                    Help us improve SamaanX
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-xl"
+                  aria-label="Close"
+                  onClick={() => setOpen(false)}
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
+                <FeedbackForm
+                  showIntro={false}
+                  onSuccess={() => setOpen(false)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <>
@@ -51,55 +113,7 @@ export function FeedbackDialog({
         {iconOnly ? null : triggerLabel}
       </Button>
 
-      {open ? (
-        <div className="fixed inset-0 z-50">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/40"
-            aria-label="Close feedback dialog"
-            onClick={() => setOpen(false)}
-          />
-          <div className="pointer-events-none fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-end justify-center p-4 sm:items-center sm:p-6">
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="feedback-dialog-title"
-                className="border-border/80 bg-card pointer-events-auto relative z-10 flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border shadow-[var(--rp-shadow-md)] sm:rounded-2xl"
-                style={{ maxHeight: "min(92dvh, 720px)" }}
-              >
-                <div className="border-border/60 flex shrink-0 items-center justify-between border-b px-4 py-3">
-                  <div>
-                    <h2
-                      id="feedback-dialog-title"
-                      className="text-base font-semibold tracking-tight"
-                    >
-                      Send feedback
-                    </h2>
-                    <p className="text-muted-foreground text-xs">
-                      Help us improve SamaanX
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:bg-muted inline-flex size-9 items-center justify-center rounded-xl"
-                    aria-label="Close"
-                    onClick={() => setOpen(false)}
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
-                  <FeedbackForm
-                    showIntro={false}
-                    onSuccess={() => setOpen(false)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {dialog ? createPortal(dialog, document.body) : null}
     </>
   );
 }
