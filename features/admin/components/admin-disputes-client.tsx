@@ -1,24 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { updateDisputeAction } from "@/features/admin/actions/dispute-actions";
+import { fetchAdminDisputesPageAction } from "@/features/admin/actions/page-queries";
 import { ConfirmDialog } from "@/features/admin/components/confirm-dialog";
 import {
   DataTable,
   TablePagination,
 } from "@/features/admin/components/data-table";
+import {
+  useAdminListQuery,
+  useInvalidateAdminList,
+} from "@/features/admin/hooks/use-admin-list-query";
 import type { AdminDisputeRow, Paginated } from "@/features/admin/types/admin";
+import { queryKeys } from "@/lib/query-keys";
 
 export function AdminDisputesClient({
   initial,
+  initialPage,
 }: {
   initial: Paginated<AdminDisputeRow>;
+  initialPage: number;
 }) {
-  const router = useRouter();
+  const invalidate = useInvalidateAdminList();
+  const [page, setPage] = React.useState(initialPage);
   const [reason, setReason] = React.useState("");
   const [notes, setNotes] = React.useState("");
   const [pending, setPending] = React.useState<{
@@ -26,6 +34,22 @@ export function AdminDisputesClient({
     status: "UNDER_REVIEW" | "RESOLVED" | "REJECTED";
   } | null>(null);
   const [loading, setLoading] = React.useState(false);
+
+  const params = React.useMemo(() => ({ page }), [page]);
+  const initialParams = React.useMemo(
+    () => ({ page: initialPage }),
+    [initialPage],
+  );
+
+  const disputesQuery = useAdminListQuery({
+    queryKey: queryKeys.admin.disputes(page),
+    fetcher: fetchAdminDisputesPageAction,
+    params,
+    initialParams,
+    initialData: initial,
+  });
+
+  const data = disputesQuery.data ?? initial;
 
   async function runAction() {
     if (!pending || reason.trim().length < 3) {
@@ -49,7 +73,7 @@ export function AdminDisputesClient({
     setPending(null);
     setReason("");
     setNotes("");
-    router.refresh();
+    invalidate(queryKeys.admin.disputes());
   }
 
   return (
@@ -57,12 +81,13 @@ export function AdminDisputesClient({
       <div>
         <h1 className="text-2xl font-semibold">Dispute center</h1>
         <p className="text-muted-foreground text-sm">
-          {initial.total} disputes
+          {data.total} disputes
+          {disputesQuery.isFetching ? " · updating…" : null}
         </p>
       </div>
 
       <DataTable
-        rows={initial.items}
+        rows={data.items}
         getRowKey={(r) => r.id}
         columns={[
           {
@@ -119,9 +144,9 @@ export function AdminDisputesClient({
       />
 
       <TablePagination
-        page={initial.page}
-        totalPages={initial.totalPages}
-        onPageChange={(page) => router.push(`/admin/disputes?page=${page}`)}
+        page={data.page}
+        totalPages={data.totalPages}
+        onPageChange={setPage}
       />
 
       <ConfirmDialog

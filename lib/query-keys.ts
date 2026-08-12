@@ -64,5 +64,7 @@ export const queryKeys = {
       [...queryKeys.admin.all, "disputes", page ?? 1] as const,
     activity: (page?: number) =>
       [...queryKeys.admin.all, "activity", page ?? 1] as const,
+    feedback: (page?: number, status?: string) =>
+      [...queryKeys.admin.all, "feedback", page ?? 1, status ?? ""] as const,
   },
 } as const;

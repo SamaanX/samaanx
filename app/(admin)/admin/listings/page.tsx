@@ -18,6 +18,10 @@ export default async function AdminListingsPage({
   });
 
   return (
-    <AdminListingsClient initial={data} filter={params.moderation ?? "all"} />
+    <AdminListingsClient
+      initial={data}
+      filter={params.moderation ?? "all"}
+      initialPage={page}
+    />
   );
 }

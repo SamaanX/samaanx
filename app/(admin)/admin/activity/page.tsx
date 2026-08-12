@@ -7,8 +7,7 @@ export default async function AdminActivityPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const params = await searchParams;
-  const data = await getAdminAuditLogsPage({
-    page: Number(params.page ?? "1"),
-  });
-  return <AdminActivityClient initial={data} />;
+  const page = Number(params.page ?? "1");
+  const data = await getAdminAuditLogsPage({ page });
+  return <AdminActivityClient initial={data} initialPage={page} />;
 }

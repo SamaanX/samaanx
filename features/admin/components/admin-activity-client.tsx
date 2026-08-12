@@ -1,19 +1,40 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import * as React from "react";
 
+import { fetchAdminActivityPageAction } from "@/features/admin/actions/page-queries";
 import {
   DataTable,
   TablePagination,
 } from "@/features/admin/components/data-table";
+import { useAdminListQuery } from "@/features/admin/hooks/use-admin-list-query";
 import type { AdminAuditRow, Paginated } from "@/features/admin/types/admin";
+import { queryKeys } from "@/lib/query-keys";
 
 export function AdminActivityClient({
   initial,
+  initialPage,
 }: {
   initial: Paginated<AdminAuditRow>;
+  initialPage: number;
 }) {
-  const router = useRouter();
+  const [page, setPage] = React.useState(initialPage);
+
+  const params = React.useMemo(() => ({ page }), [page]);
+  const initialParams = React.useMemo(
+    () => ({ page: initialPage }),
+    [initialPage],
+  );
+
+  const activityQuery = useAdminListQuery({
+    queryKey: queryKeys.admin.activity(page),
+    fetcher: fetchAdminActivityPageAction,
+    params,
+    initialParams,
+    initialData: initial,
+  });
+
+  const data = activityQuery.data ?? initial;
 
   return (
     <div className="space-y-4">
@@ -21,10 +42,11 @@ export function AdminActivityClient({
         <h1 className="text-2xl font-semibold">Activity log</h1>
         <p className="text-muted-foreground text-sm">
           Every admin action is recorded.
+          {activityQuery.isFetching ? " · updating…" : null}
         </p>
       </div>
       <DataTable
-        rows={initial.items}
+        rows={data.items}
         getRowKey={(r) => r.id}
         columns={[
           {
@@ -47,9 +69,9 @@ export function AdminActivityClient({
         ]}
       />
       <TablePagination
-        page={initial.page}
-        totalPages={initial.totalPages}
-        onPageChange={(page) => router.push(`/admin/activity?page=${page}`)}
+        page={data.page}
+        totalPages={data.totalPages}
+        onPageChange={setPage}
       />
     </div>
   );

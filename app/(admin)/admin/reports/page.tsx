@@ -7,6 +7,7 @@ export default async function AdminReportsPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const params = await searchParams;
-  const data = await getAdminReportsPage({ page: Number(params.page ?? "1") });
-  return <AdminReportsClient initial={data} />;
+  const page = Number(params.page ?? "1");
+  const data = await getAdminReportsPage({ page });
+  return <AdminReportsClient initial={data} initialPage={page} />;
 }

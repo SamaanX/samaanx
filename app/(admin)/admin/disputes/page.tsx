@@ -7,6 +7,7 @@ export default async function AdminDisputesPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const params = await searchParams;
-  const data = await getAdminDisputesPage({ page: Number(params.page ?? "1") });
-  return <AdminDisputesClient initial={data} />;
+  const page = Number(params.page ?? "1");
+  const data = await getAdminDisputesPage({ page });
+  return <AdminDisputesClient initial={data} initialPage={page} />;
 }

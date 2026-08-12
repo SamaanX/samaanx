@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import type { ListingModerationStatus } from "@prisma/client";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -10,29 +10,71 @@ import {
   rejectListingAction,
   restoreListingAction,
 } from "@/features/admin/actions/listing-actions";
+import { fetchAdminListingsPageAction } from "@/features/admin/actions/page-queries";
 import { ConfirmDialog } from "@/features/admin/components/confirm-dialog";
 import {
   DataTable,
   TablePagination,
 } from "@/features/admin/components/data-table";
+import {
+  useAdminListQuery,
+  useInvalidateAdminList,
+} from "@/features/admin/hooks/use-admin-list-query";
 import type { AdminListingRow, Paginated } from "@/features/admin/types/admin";
+import { queryKeys } from "@/lib/query-keys";
 
 type AdminListingsClientProps = {
   initial: Paginated<AdminListingRow>;
   filter?: string;
+  initialPage: number;
 };
 
 export function AdminListingsClient({
   initial,
   filter,
+  initialPage,
 }: AdminListingsClientProps) {
-  const router = useRouter();
+  const invalidate = useInvalidateAdminList();
+  const [page, setPage] = React.useState(initialPage);
+  const [moderationFilter, setModerationFilter] = React.useState(
+    filter ?? "all",
+  );
   const [reason, setReason] = React.useState("");
   const [pending, setPending] = React.useState<{
     action: "approve" | "reject" | "hide" | "restore";
     listingId: string;
   } | null>(null);
   const [loading, setLoading] = React.useState(false);
+
+  const moderationStatus =
+    moderationFilter === "all"
+      ? undefined
+      : (moderationFilter as ListingModerationStatus);
+
+  const params = React.useMemo(
+    () => ({ page, moderationStatus }),
+    [page, moderationStatus],
+  );
+  const initialParams = React.useMemo(
+    () => ({
+      page: initialPage,
+      moderationStatus:
+        (filter ?? "all") === "all"
+          ? undefined
+          : (filter as ListingModerationStatus),
+    }),
+    [filter, initialPage],
+  );
+
+  const listingsQuery = useAdminListQuery({
+    queryKey: queryKeys.admin.listings(page, moderationFilter),
+    fetcher: fetchAdminListingsPageAction,
+    params,
+    initialParams,
+    initialData: initial,
+  });
+
+  const data = listingsQuery.data ?? initial;
 
   async function runAction() {
     if (!pending || reason.trim().length < 3) {
@@ -57,7 +99,7 @@ export function AdminListingsClient({
     toast.success("Listing updated.");
     setPending(null);
     setReason("");
-    router.refresh();
+    invalidate(queryKeys.admin.listings());
   }
 
   return (
@@ -66,7 +108,8 @@ export function AdminListingsClient({
         <div>
           <h1 className="text-2xl font-semibold">Listing moderation</h1>
           <p className="text-muted-foreground text-sm">
-            {initial.total} listings
+            {data.total} listings
+            {listingsQuery.isFetching ? " · updating…" : null}
           </p>
         </div>
         <div className="flex gap-2">
@@ -74,15 +117,12 @@ export function AdminListingsClient({
             <button
               key={f}
               type="button"
-              onClick={() =>
-                router.push(
-                  f === "all"
-                    ? "/admin/listings"
-                    : `/admin/listings?moderation=${f}`,
-                )
-              }
+              onClick={() => {
+                setModerationFilter(f);
+                setPage(1);
+              }}
               className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                (filter ?? "all") === f
+                moderationFilter === f
                   ? "bg-brand-blue-soft text-brand-blue"
                   : ""
               }`}
@@ -94,7 +134,7 @@ export function AdminListingsClient({
       </div>
 
       <DataTable
-        rows={initial.items}
+        rows={data.items}
         getRowKey={(r) => r.id}
         columns={[
           { key: "title", header: "Listing", render: (r) => r.title },
@@ -154,9 +194,9 @@ export function AdminListingsClient({
       />
 
       <TablePagination
-        page={initial.page}
-        totalPages={initial.totalPages}
-        onPageChange={(page) => router.push(`/admin/listings?page=${page}`)}
+        page={data.page}
+        totalPages={data.totalPages}
+        onPageChange={setPage}
       />
 
       <ConfirmDialog

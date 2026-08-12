@@ -14,7 +14,8 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,8 @@ const NAV = [
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ] as const;
 
+export const ADMIN_NAV_HREFS = NAV.map((item) => item.href);
+
 type AdminSidebarProps = {
   role: "ADMIN" | "SUPER_ADMIN";
   displayName: string;
@@ -39,6 +42,13 @@ type AdminSidebarProps = {
 
 export function AdminSidebar({ role, displayName }: AdminSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  React.useEffect(() => {
+    for (const href of ADMIN_NAV_HREFS) {
+      router.prefetch(href);
+    }
+  }, [router]);
 
   return (
     <aside className="border-border/70 bg-card/80 flex h-full w-full flex-col border-r backdrop-blur">
@@ -62,6 +72,8 @@ export function AdminSidebar({ role, displayName }: AdminSidebarProps) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch
+              onMouseEnter={() => router.prefetch(item.href)}
               className={cn(
                 "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
                 active

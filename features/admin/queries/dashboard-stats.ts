@@ -89,23 +89,32 @@ export const getAdminGrowthSeries = cache(
   async (days = 30): Promise<AdminGrowthPoint[]> => {
     const since = new Date();
     since.setDate(since.getDate() - days);
+    since.setHours(0, 0, 0, 0);
+
+    type DailyRow = { date: Date; count: bigint };
 
     const [users, listings, rentals] = await Promise.all([
-      prisma.profile.findMany({
-        where: { createdAt: { gte: since }, deletedAt: null },
-        select: { createdAt: true },
-        orderBy: { createdAt: "asc" },
-      }),
-      prisma.listing.findMany({
-        where: { createdAt: { gte: since }, deletedAt: null },
-        select: { createdAt: true },
-        orderBy: { createdAt: "asc" },
-      }),
-      prisma.rental.findMany({
-        where: { createdAt: { gte: since } },
-        select: { createdAt: true },
-        orderBy: { createdAt: "asc" },
-      }),
+      prisma.$queryRaw<DailyRow[]>`
+        SELECT DATE_TRUNC('day', created_at)::date AS date, COUNT(*)::bigint AS count
+        FROM profiles
+        WHERE created_at >= ${since} AND deleted_at IS NULL
+        GROUP BY 1
+        ORDER BY 1
+      `,
+      prisma.$queryRaw<DailyRow[]>`
+        SELECT DATE_TRUNC('day', created_at)::date AS date, COUNT(*)::bigint AS count
+        FROM listings
+        WHERE created_at >= ${since} AND deleted_at IS NULL
+        GROUP BY 1
+        ORDER BY 1
+      `,
+      prisma.$queryRaw<DailyRow[]>`
+        SELECT DATE_TRUNC('day', created_at)::date AS date, COUNT(*)::bigint AS count
+        FROM rentals
+        WHERE created_at >= ${since}
+        GROUP BY 1
+        ORDER BY 1
+      `,
     ]);
 
     const buckets = new Map<string, AdminGrowthPoint>();
@@ -117,16 +126,19 @@ export const getAdminGrowthSeries = cache(
     }
 
     for (const row of users) {
-      const key = row.createdAt.toISOString().slice(0, 10);
-      buckets.get(key)!.users += 1;
+      const key = row.date.toISOString().slice(0, 10);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.users = Number(row.count);
     }
     for (const row of listings) {
-      const key = row.createdAt.toISOString().slice(0, 10);
-      buckets.get(key)!.listings += 1;
+      const key = row.date.toISOString().slice(0, 10);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.listings = Number(row.count);
     }
     for (const row of rentals) {
-      const key = row.createdAt.toISOString().slice(0, 10);
-      buckets.get(key)!.rentals += 1;
+      const key = row.date.toISOString().slice(0, 10);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.rentals = Number(row.count);
     }
 
     return [...buckets.values()];

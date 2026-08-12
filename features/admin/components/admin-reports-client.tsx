@@ -1,9 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { fetchAdminReportsPageAction } from "@/features/admin/actions/page-queries";
 import {
   banReportUserAction,
   removeReportedListingAction,
@@ -15,20 +15,44 @@ import {
   DataTable,
   TablePagination,
 } from "@/features/admin/components/data-table";
+import {
+  useAdminListQuery,
+  useInvalidateAdminList,
+} from "@/features/admin/hooks/use-admin-list-query";
 import type { AdminReportRow, Paginated } from "@/features/admin/types/admin";
+import { queryKeys } from "@/lib/query-keys";
 
 export function AdminReportsClient({
   initial,
+  initialPage,
 }: {
   initial: Paginated<AdminReportRow>;
+  initialPage: number;
 }) {
-  const router = useRouter();
+  const invalidate = useInvalidateAdminList();
+  const [page, setPage] = React.useState(initialPage);
   const [reason, setReason] = React.useState("");
   const [pending, setPending] = React.useState<{
     reportId: string;
     action: "dismiss" | "review" | "warn" | "ban" | "remove";
   } | null>(null);
   const [loading, setLoading] = React.useState(false);
+
+  const params = React.useMemo(() => ({ page }), [page]);
+  const initialParams = React.useMemo(
+    () => ({ page: initialPage }),
+    [initialPage],
+  );
+
+  const reportsQuery = useAdminListQuery({
+    queryKey: queryKeys.admin.reports(page),
+    fetcher: fetchAdminReportsPageAction,
+    params,
+    initialParams,
+    initialData: initial,
+  });
+
+  const data = reportsQuery.data ?? initial;
 
   async function runAction() {
     if (!pending || reason.trim().length < 3) {
@@ -76,18 +100,21 @@ export function AdminReportsClient({
     toast.success("Report updated.");
     setPending(null);
     setReason("");
-    router.refresh();
+    invalidate(queryKeys.admin.reports());
   }
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold">Reports</h1>
-        <p className="text-muted-foreground text-sm">{initial.total} total</p>
+        <p className="text-muted-foreground text-sm">
+          {data.total} total
+          {reportsQuery.isFetching ? " · updating…" : null}
+        </p>
       </div>
 
       <DataTable
-        rows={initial.items}
+        rows={data.items}
         getRowKey={(r) => r.id}
         columns={[
           { key: "type", header: "Type", render: (r) => r.type },
@@ -156,9 +183,9 @@ export function AdminReportsClient({
       />
 
       <TablePagination
-        page={initial.page}
-        totalPages={initial.totalPages}
-        onPageChange={(page) => router.push(`/admin/reports?page=${page}`)}
+        page={data.page}
+        totalPages={data.totalPages}
+        onPageChange={setPage}
       />
 
       <ConfirmDialog

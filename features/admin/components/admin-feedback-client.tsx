@@ -1,17 +1,23 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import type { FeedbackStatus } from "@prisma/client";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { updateFeedbackStatusAction } from "@/features/admin/actions/feedback-actions";
+import { fetchAdminFeedbackPageAction } from "@/features/admin/actions/page-queries";
 import { ConfirmDialog } from "@/features/admin/components/confirm-dialog";
 import {
   DataTable,
   TablePagination,
 } from "@/features/admin/components/data-table";
+import {
+  useAdminListQuery,
+  useInvalidateAdminList,
+} from "@/features/admin/hooks/use-admin-list-query";
 import type { AdminFeedbackRow, Paginated } from "@/features/admin/types/admin";
 import { FEEDBACK_STATUS_LABELS } from "@/features/feedback/types/feedback";
+import { queryKeys } from "@/lib/query-keys";
 
 const STATUS_FILTERS = [
   { value: "", label: "All" },
@@ -24,11 +30,15 @@ const STATUS_FILTERS = [
 export function AdminFeedbackClient({
   initial,
   statusFilter,
+  initialPage,
 }: {
   initial: Paginated<AdminFeedbackRow>;
   statusFilter?: string;
+  initialPage: number;
 }) {
-  const router = useRouter();
+  const invalidate = useInvalidateAdminList();
+  const [page, setPage] = React.useState(initialPage);
+  const [status, setStatus] = React.useState(statusFilter ?? "");
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
   const [adminNotes, setAdminNotes] = React.useState("");
   const [reason, setReason] = React.useState("");
@@ -38,11 +48,32 @@ export function AdminFeedbackClient({
   } | null>(null);
   const [loading, setLoading] = React.useState(false);
 
-  function setFilter(status: string) {
-    const params = new URLSearchParams();
-    if (status) params.set("status", status);
-    router.push(`/admin/feedback?${params.toString()}`);
-  }
+  const feedbackStatus = status === "" ? undefined : (status as FeedbackStatus);
+
+  const params = React.useMemo(
+    () => ({ page, status: feedbackStatus }),
+    [page, feedbackStatus],
+  );
+  const initialParams = React.useMemo(
+    () => ({
+      page: initialPage,
+      status:
+        (statusFilter ?? "") === ""
+          ? undefined
+          : (statusFilter as FeedbackStatus),
+    }),
+    [initialPage, statusFilter],
+  );
+
+  const feedbackQuery = useAdminListQuery({
+    queryKey: queryKeys.admin.feedback(page, status),
+    fetcher: fetchAdminFeedbackPageAction,
+    params,
+    initialParams,
+    initialData: initial,
+  });
+
+  const data = feedbackQuery.data ?? initial;
 
   async function runAction() {
     if (!pending || reason.trim().length < 3) {
@@ -65,7 +96,7 @@ export function AdminFeedbackClient({
     setPending(null);
     setReason("");
     setAdminNotes("");
-    router.refresh();
+    invalidate(queryKeys.admin.feedback());
   }
 
   return (
@@ -73,8 +104,8 @@ export function AdminFeedbackClient({
       <div>
         <h1 className="text-2xl font-semibold">User feedback</h1>
         <p className="text-muted-foreground text-sm">
-          {initial.total} submission{initial.total === 1 ? "" : "s"} from
-          profile
+          {data.total} submission{data.total === 1 ? "" : "s"} from profile
+          {feedbackQuery.isFetching ? " · updating…" : null}
         </p>
       </div>
 
@@ -83,9 +114,12 @@ export function AdminFeedbackClient({
           <button
             key={f.label}
             type="button"
-            onClick={() => setFilter(f.value)}
+            onClick={() => {
+              setStatus(f.value);
+              setPage(1);
+            }}
             className={
-              (statusFilter ?? "") === f.value
+              status === f.value
                 ? "bg-brand-blue-soft text-brand-blue rounded-full px-3 py-1.5 text-sm font-medium"
                 : "bg-muted/60 text-muted-foreground hover:text-foreground rounded-full px-3 py-1.5 text-sm"
             }
@@ -96,7 +130,7 @@ export function AdminFeedbackClient({
       </div>
 
       <DataTable
-        rows={initial.items}
+        rows={data.items}
         getRowKey={(r) => r.id}
         emptyMessage="No feedback yet."
         columns={[
@@ -187,7 +221,7 @@ export function AdminFeedbackClient({
       {expandedId ? (
         <div className="border-border/70 bg-card space-y-2 rounded-xl border p-4 text-sm">
           {(() => {
-            const row = initial.items.find((r) => r.id === expandedId);
+            const row = data.items.find((r) => r.id === expandedId);
             if (!row) return null;
             return (
               <>
@@ -213,14 +247,9 @@ export function AdminFeedbackClient({
       ) : null}
 
       <TablePagination
-        page={initial.page}
-        totalPages={initial.totalPages}
-        onPageChange={(page) => {
-          const params = new URLSearchParams();
-          params.set("page", String(page));
-          if (statusFilter) params.set("status", statusFilter);
-          router.push(`/admin/feedback?${params.toString()}`);
-        }}
+        page={data.page}
+        totalPages={data.totalPages}
+        onPageChange={setPage}
       />
 
       <ConfirmDialog

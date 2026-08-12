@@ -9,6 +9,7 @@ export default async function AdminFeedbackPage({
   searchParams: Promise<{ page?: string; status?: string }>;
 }) {
   const params = await searchParams;
+  const page = Number(params.page ?? "1");
   const status = params.status as FeedbackStatus | undefined;
   const allowed: FeedbackStatus[] = [
     "OPEN",
@@ -17,11 +18,15 @@ export default async function AdminFeedbackPage({
     "DISMISSED",
   ];
   const data = await getAdminFeedbackPage({
-    page: Number(params.page ?? "1"),
+    page,
     status: status && allowed.includes(status) ? status : undefined,
   });
 
   return (
-    <AdminFeedbackClient initial={data} statusFilter={params.status ?? ""} />
+    <AdminFeedbackClient
+      initial={data}
+      statusFilter={params.status ?? ""}
+      initialPage={page}
+    />
   );
 }

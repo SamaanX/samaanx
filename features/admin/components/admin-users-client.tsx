@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { fetchAdminUsersPageAction } from "@/features/admin/actions/page-queries";
 import {
   softDeleteUserAction,
   suspendUserAction,
@@ -17,27 +17,54 @@ import {
   DataTable,
   TablePagination,
 } from "@/features/admin/components/data-table";
+import {
+  useAdminListQuery,
+  useInvalidateAdminList,
+} from "@/features/admin/hooks/use-admin-list-query";
 import type { AdminUserRow, Paginated } from "@/features/admin/types/admin";
+import { queryKeys } from "@/lib/query-keys";
 
 type AdminUsersClientProps = {
   initial: Paginated<AdminUserRow>;
   viewerRole: "ADMIN" | "SUPER_ADMIN";
   initialQ?: string;
+  initialPage: number;
 };
 
 export function AdminUsersClient({
   initial,
   viewerRole,
   initialQ = "",
+  initialPage,
 }: AdminUsersClientProps) {
-  const router = useRouter();
+  const invalidate = useInvalidateAdminList();
   const [q, setQ] = React.useState(initialQ);
+  const [page, setPage] = React.useState(initialPage);
   const [reason, setReason] = React.useState("");
   const [pending, setPending] = React.useState<{
     type: "suspend" | "unsuspend" | "delete" | "verify";
     userId: string;
   } | null>(null);
   const [loading, setLoading] = React.useState(false);
+
+  const params = React.useMemo(
+    () => ({ page, q: q.trim() || undefined }),
+    [page, q],
+  );
+  const initialParams = React.useMemo(
+    () => ({ page: initialPage, q: initialQ.trim() || undefined }),
+    [initialPage, initialQ],
+  );
+
+  const usersQuery = useAdminListQuery({
+    queryKey: queryKeys.admin.users(page, q.trim()),
+    fetcher: fetchAdminUsersPageAction,
+    params,
+    initialParams,
+    initialData: initial,
+  });
+
+  const data = usersQuery.data ?? initial;
 
   async function runAction() {
     if (!pending || reason.trim().length < 3) {
@@ -67,7 +94,7 @@ export function AdminUsersClient({
     toast.success("User updated.");
     setPending(null);
     setReason("");
-    router.refresh();
+    invalidate(queryKeys.admin.users());
   }
 
   return (
@@ -76,19 +103,20 @@ export function AdminUsersClient({
         <div>
           <h1 className="text-2xl font-semibold">Users</h1>
           <p className="text-muted-foreground text-sm">
-            {initial.total} accounts
+            {data.total} accounts
+            {usersQuery.isFetching ? " · updating…" : null}
           </p>
         </div>
         <form
           className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            router.push(`/admin/users?q=${encodeURIComponent(q)}`);
+          onSubmit={(event) => {
+            event.preventDefault();
+            setPage(1);
           }}
         >
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(event) => setQ(event.target.value)}
             placeholder="Search email or name"
             className="border-border bg-background rounded-lg border px-3 py-2 text-sm"
           />
@@ -102,7 +130,7 @@ export function AdminUsersClient({
       </div>
 
       <DataTable
-        rows={initial.items}
+        rows={data.items}
         getRowKey={(r) => r.id}
         columns={[
           {
@@ -175,7 +203,7 @@ export function AdminUsersClient({
                       if (!res.ok) toast.error(res.error.message);
                       else {
                         toast.success("Role updated");
-                        router.refresh();
+                        invalidate(queryKeys.admin.users());
                       }
                     }}
                   >
@@ -189,13 +217,9 @@ export function AdminUsersClient({
       />
 
       <TablePagination
-        page={initial.page}
-        totalPages={initial.totalPages}
-        onPageChange={(page) =>
-          router.push(
-            `/admin/users?page=${page}${q ? `&q=${encodeURIComponent(q)}` : ""}`,
-          )
-        }
+        page={data.page}
+        totalPages={data.totalPages}
+        onPageChange={setPage}
       />
 
       <ConfirmDialog

@@ -5,8 +5,6 @@ import { isAdminRole } from "@/features/admin/services/permissions";
 import { getCurrentProfile } from "@/lib/auth/guards";
 import { getCurrentUser, isAnonymousUser } from "@/lib/auth/session";
 
-export const dynamic = "force-dynamic";
-
 export default async function AdminLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
