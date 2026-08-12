@@ -9,6 +9,7 @@ import { SellerRouteModeSync } from "@/components/layout/seller-route-mode-sync"
 import { SiteHeader } from "@/components/layout/site-header";
 import { CriticalActivitySlot } from "@/features/activity/components/critical-activity-slot";
 import { isAdminRole } from "@/features/admin/services/permissions";
+import { AiAssistantWidget } from "@/features/ai/components/ai-assistant-widget";
 import { HeaderNotifications } from "@/features/notifications/components/header-notifications";
 import { toProfileViewModel } from "@/features/profile/types/profile";
 import { getCurrentProfile } from "@/lib/auth/guards";
@@ -63,6 +64,7 @@ export default async function AppLayout({
             <main id="main-content" className="flex-1" tabIndex={-1}>
               {children}
             </main>
+            <AiAssistantWidget />
           </div>
         </div>
       </RealtimeUserBridge>

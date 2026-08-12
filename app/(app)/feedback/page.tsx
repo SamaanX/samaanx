@@ -23,7 +23,7 @@ export default async function FeedbackPage() {
   const recent = history.ok ? history.data : [];
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-4 pt-4 pb-20 sm:px-6 sm:pt-6">
+    <div className="mx-auto flex w-full max-w-2xl flex-col px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-6 space-y-2">
         <BackButton fallbackHref={BACK_FALLBACKS.profile} />
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">

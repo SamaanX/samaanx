@@ -12,7 +12,6 @@ export const HOME_NAV: NavItem = { href: "/", label: "Home" };
 export const BUYER_NAV: readonly NavItem[] = [
   HOME_NAV,
   { href: "/search", label: "Browse" },
-  { href: "/ai", label: "AI Assistant" },
   { href: "/rentals", label: "My rentals" },
   { href: "/chat", label: "Chat" },
 ] as const;
@@ -32,7 +31,6 @@ export function navForMode(
     return [
       HOME_NAV,
       { href: "/search", label: "Browse" },
-      { href: "/ai", label: "AI Assistant" },
       { href: "/categories", label: "Categories" },
     ] as const;
   }
