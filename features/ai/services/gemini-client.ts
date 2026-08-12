@@ -8,10 +8,11 @@ import type {
   AiParsedIntent,
 } from "@/features/ai/types/ai-chat";
 import { AppError } from "@/lib/errors/app-error";
+import { logger } from "@/lib/logger";
 
 import { formatListingsContext } from "./query-grounded-listings";
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-3.5-flash";
 const GEMINI_TIMEOUT_MS = 25_000;
 
 function getGeminiClient(): GoogleGenAI {
@@ -65,6 +66,13 @@ export async function generateAiAssistantReply(params: {
   } catch (error) {
     if (error instanceof AppError) {
       throw error;
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      logger.error("Gemini API request failed", {
+        name: error instanceof Error ? error.name : "unknown",
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
 
     if (error instanceof Error && error.name === "TimeoutError") {
