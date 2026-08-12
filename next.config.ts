@@ -1,4 +1,5 @@
 import bundleAnalyzer from "@next/bundle-analyzer";
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 const withBundleAnalyzer = bundleAnalyzer({
@@ -21,4 +22,11 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withBundleAnalyzer(nextConfig);
+export default withSentryConfig(withBundleAnalyzer(nextConfig), {
+  org: "samaanx",
+  project: "javascript-nextjs",
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  disableLogger: true,
+  automaticVercelMonitors: true,
+});

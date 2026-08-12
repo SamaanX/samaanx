@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/nextjs";
+
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 type LogContext = Record<string, unknown>;
@@ -22,8 +24,16 @@ function write(level: LogLevel, message: string, context?: LogContext) {
     ...(context ? { context } : {}),
   };
 
-  // Structured logging abstraction — swap for Sentry/etc. in later phases.
   const line = JSON.stringify(payload);
+
+  if (level === "error") {
+    const error =
+      context?.error instanceof Error ? context.error : new Error(message);
+    Sentry.captureException(error, {
+      extra: context,
+      level: "error",
+    });
+  }
 
   if (level === "debug") {
     console.warn(line);
