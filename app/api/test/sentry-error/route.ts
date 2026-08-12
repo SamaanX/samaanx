@@ -47,5 +47,6 @@ export async function GET(request: Request) {
   );
 
   Sentry.captureException(error);
+  await Sentry.flush(2000);
   throw error;
 }
