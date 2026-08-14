@@ -4,6 +4,7 @@ import type {
   ActivityAlert,
   ActivitySnapshot,
 } from "@/features/activity/types/activity";
+import { getActiveAnnouncementsForUser } from "@/features/announcements/queries/active-announcements";
 import { prisma } from "@/lib/db/prisma";
 import type { AppUiMode } from "@/lib/ui/app-mode";
 
@@ -25,25 +26,37 @@ export const getCriticalActivitySnapshot = cache(
     const partyWhere =
       mode === "SELLER" ? { sellerId: userId } : { buyerId: userId };
 
-    const rentals = await prisma.rental.findMany({
-      where: {
-        ...partyWhere,
-        status: { in: [...ACTIVE_STATUSES] },
-      },
-      select: {
-        id: true,
-        status: true,
-        buyerId: true,
-        sellerId: true,
-        rejectionReason: true,
-        updatedAt: true,
-        listing: { select: { title: true, slug: true } },
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 24,
-    });
+    const [announcements, rentals] = await Promise.all([
+      getActiveAnnouncementsForUser(userId),
+      prisma.rental.findMany({
+        where: {
+          ...partyWhere,
+          status: { in: [...ACTIVE_STATUSES] },
+        },
+        select: {
+          id: true,
+          status: true,
+          buyerId: true,
+          sellerId: true,
+          rejectionReason: true,
+          updatedAt: true,
+          listing: { select: { title: true, slug: true } },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 24,
+      }),
+    ]);
 
-    const alerts: ActivityAlert[] = [];
+    const alerts: ActivityAlert[] = announcements.map((item, index) => ({
+      id: `announcement-${item.id}`,
+      kind: "announcement" as const,
+      tone: "blue" as const,
+      title: item.title,
+      description: item.body,
+      dismissible: item.dismissible,
+      announcementId: item.id,
+      priority: index + 1,
+    }));
     let sellerPendingCount = 0;
     let buyerPendingCount = 0;
     let buyerApprovedCount = 0;
@@ -91,6 +104,7 @@ export const getCriticalActivitySnapshot = cache(
       if (sellerPendingCount > 0) {
         alerts.push({
           id: "seller-pending-requests",
+          kind: "rental",
           tone: "green",
           title:
             sellerPendingCount === 1
@@ -108,6 +122,7 @@ export const getCriticalActivitySnapshot = cache(
       if (returnAsSeller.length > 0) {
         const item = returnAsSeller[0]!;
         alerts.push({
+          kind: "rental",
           id: `seller-return-${item.id}`,
           tone: "purple",
           title: "Buyer has requested to return your item.",
@@ -121,6 +136,7 @@ export const getCriticalActivitySnapshot = cache(
       if (sellerHandover.length > 0) {
         const item = sellerHandover[0]!;
         alerts.push({
+          kind: "rental",
           id: `seller-handover-${item.id}`,
           tone: "blue",
           title: "Buyer is waiting to hand over the item.",
@@ -134,6 +150,7 @@ export const getCriticalActivitySnapshot = cache(
       if (buyerApprovedCount > 0) {
         const item = buyerApproved[0]!;
         alerts.push({
+          kind: "rental",
           id: `buyer-approved-${item.id}`,
           tone: "green",
           title: `Your rental request for “${item.listing.title}” has been approved.`,
@@ -147,6 +164,7 @@ export const getCriticalActivitySnapshot = cache(
       if (returnAsBuyer.length > 0) {
         const item = returnAsBuyer[0]!;
         alerts.push({
+          kind: "rental",
           id: `buyer-return-${item.id}`,
           tone: "orange",
           title: "Return verification is ready.",
@@ -160,6 +178,7 @@ export const getCriticalActivitySnapshot = cache(
       if (buyerPendingCount > 0) {
         const item = buyerPending[0]!;
         alerts.push({
+          kind: "rental",
           id: `buyer-pending-${item.id}`,
           tone: "yellow",
           title: "Waiting for seller approval.",
@@ -176,6 +195,7 @@ export const getCriticalActivitySnapshot = cache(
       if (recentRejected.length > 0) {
         const item = recentRejected[0]!;
         alerts.push({
+          kind: "rental",
           id: `buyer-rejected-${item.id}`,
           tone: "red",
           title: `Rental request for “${item.listing.title}” was rejected.`,

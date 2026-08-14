@@ -33,10 +33,14 @@ export async function getAdminAnnouncements(): Promise<AnnouncementView[]> {
       title: true,
       body: true,
       target: true,
+      targetUserId: true,
       dismissible: true,
       isActive: true,
       startsAt: true,
       endsAt: true,
+      targetUser: {
+        select: { displayName: true, email: true },
+      },
     },
   });
 
@@ -45,6 +49,10 @@ export async function getAdminAnnouncements(): Promise<AnnouncementView[]> {
     title: r.title,
     body: r.body,
     target: r.target,
+    targetUserId: r.targetUserId,
+    targetUserLabel: r.targetUser
+      ? `${r.targetUser.displayName} · ${r.targetUser.email}`
+      : null,
     dismissible: r.dismissible,
     isActive: r.isActive,
     startsAt: r.startsAt.toISOString(),

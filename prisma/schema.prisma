@@ -180,6 +180,7 @@ enum AnnouncementTarget {
   BUYERS
   SELLERS
   ADMINS
+  USER
 
   @@map("announcement_target")
 }
@@ -282,6 +283,8 @@ model Profile {
   disputesAssigned         Dispute[]                @relation("DisputeAssignee")
   listingsModerated        Listing[]                @relation("ListingModerator")
   announcementsCreated     Announcement[]           @relation("AnnouncementCreator")
+  announcementsReceived    Announcement[]           @relation("AnnouncementTargetUser")
+  announcementDismissals   AnnouncementDismissal[]
   auditLogs                AuditLog[]               @relation("AuditActor")
   conversationsAsBuyer     Conversation[]           @relation("ConversationBuyer")
   conversationsAsSeller    Conversation[]           @relation("ConversationSeller")
@@ -794,21 +797,39 @@ model PlatformSetting {
 }
 
 model Announcement {
-  id          String             @id @default(uuid()) @db.Uuid
-  title       String
-  body        String
-  target      AnnouncementTarget @default(ALL)
-  dismissible Boolean            @default(true)
-  isActive    Boolean            @default(true) @map("is_active")
-  startsAt    DateTime           @default(now()) @map("starts_at") @db.Timestamptz(6)
-  endsAt      DateTime?          @map("ends_at") @db.Timestamptz(6)
-  createdById String             @map("created_by") @db.Uuid
-  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String             @id @default(uuid()) @db.Uuid
+  title        String
+  body         String
+  target       AnnouncementTarget @default(ALL)
+  targetUserId String?            @map("target_user_id") @db.Uuid
+  dismissible  Boolean            @default(true)
+  isActive     Boolean            @default(true) @map("is_active")
+  startsAt     DateTime           @default(now()) @map("starts_at") @db.Timestamptz(6)
+  endsAt       DateTime?          @map("ends_at") @db.Timestamptz(6)
+  createdById  String             @map("created_by") @db.Uuid
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  createdBy Profile @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy  Profile                 @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  targetUser Profile?                @relation("AnnouncementTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  dismissals AnnouncementDismissal[]
 
   @@index([isActive, startsAt(sort: Desc)])
   @@index([target, isActive])
+  @@index([targetUserId, isActive])
   @@map("announcements")
+}
+
+model AnnouncementDismissal {
+  id             String   @id @default(uuid()) @db.Uuid
+  announcementId String   @map("announcement_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  dismissedAt    DateTime @default(now()) @map("dismissed_at") @db.Timestamptz(6)
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([userId])
+  @@map("announcement_dismissals")
 }

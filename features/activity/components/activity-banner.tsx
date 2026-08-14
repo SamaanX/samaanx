@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Home } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, Home, Megaphone, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
+import { toast } from "sonner";
 
 import { getCriticalActivitySnapshotAction } from "@/features/activity/actions/get-critical-activity";
 import type {
@@ -11,6 +12,7 @@ import type {
   ActivitySnapshot,
   ActivityTone,
 } from "@/features/activity/types/activity";
+import { dismissAnnouncementForModeAction } from "@/features/announcements/actions/announcement-actions";
 import { queryKeys } from "@/lib/query-keys";
 import type { AppUiMode } from "@/lib/ui/app-mode";
 import { cn } from "@/lib/utils";
@@ -35,10 +37,10 @@ type ActivityBannerProps = {
   initial: ActivitySnapshot;
 };
 
-function AlertCard({ alert }: { alert: ActivityAlert }) {
+function RentalAlertCard({ alert }: { alert: ActivityAlert }) {
   return (
     <Link
-      href={alert.href}
+      href={alert.href ?? "/rentals"}
       prefetch
       className={cn(
         "flex items-start justify-between gap-3 rounded-2xl border px-3.5 py-3 transition-opacity hover:opacity-95",
@@ -53,11 +55,68 @@ function AlertCard({ alert }: { alert: ActivityAlert }) {
           </p>
         ) : null}
         <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold">
-          {alert.ctaLabel}
+          {alert.ctaLabel ?? "View"}
           <ArrowRight className="size-3.5" aria-hidden />
         </span>
       </div>
     </Link>
+  );
+}
+
+function AnnouncementAlertCard({
+  alert,
+  onDismiss,
+  dismissing,
+}: {
+  alert: ActivityAlert;
+  onDismiss: (announcementId: string) => void;
+  dismissing: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "border-brand-blue/30 bg-brand-blue-soft/70 relative overflow-hidden rounded-2xl border px-3.5 py-3 shadow-[var(--rp-shadow-xs)]",
+      )}
+    >
+      <div className="bg-brand-blue/10 pointer-events-none absolute inset-y-0 left-0 w-1" />
+      <div className="flex items-start gap-3">
+        <div className="bg-brand-blue flex size-9 shrink-0 items-center justify-center rounded-xl text-white">
+          <Megaphone className="size-4" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-brand-blue text-[0.7rem] font-semibold tracking-wide uppercase">
+            SamaanX announcement
+          </p>
+          <p className="text-foreground mt-0.5 text-sm font-semibold">
+            {alert.title}
+          </p>
+          {alert.description ? (
+            <p className="text-muted-foreground mt-1 text-sm leading-relaxed whitespace-pre-wrap">
+              {alert.description}
+            </p>
+          ) : null}
+          <Link
+            href="/notifications"
+            prefetch
+            className="text-brand-blue mt-2 inline-flex items-center gap-1 text-xs font-semibold hover:underline"
+          >
+            View in notifications
+            <ArrowRight className="size-3.5" aria-hidden />
+          </Link>
+        </div>
+        {alert.dismissible && alert.announcementId ? (
+          <button
+            type="button"
+            disabled={dismissing}
+            onClick={() => onDismiss(alert.announcementId!)}
+            className="text-muted-foreground hover:bg-background/80 inline-flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors"
+            aria-label="Dismiss announcement"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -66,6 +125,8 @@ export function ActivityBanner({
   initial,
 }: ActivityBannerProps) {
   const { mode } = usePreferredMode(preferredMode);
+  const queryClient = useQueryClient();
+  const [dismissingId, setDismissingId] = React.useState<string | null>(null);
 
   const query = useQuery({
     queryKey: queryKeys.activity.snapshot(mode),
@@ -83,12 +144,35 @@ export function ActivityBanner({
     },
     initialData: mode === preferredMode ? initial : undefined,
     initialDataUpdatedAt: mode === preferredMode ? Date.now() : undefined,
-    // RSC already hydrated; realtime bumps invalidate when state changes.
     staleTime: 30_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
   });
+
+  async function dismissAnnouncement(announcementId: string) {
+    setDismissingId(announcementId);
+    const result = await dismissAnnouncementForModeAction(announcementId, mode);
+    setDismissingId(null);
+
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+
+    queryClient.setQueryData<ActivitySnapshot>(
+      queryKeys.activity.snapshot(mode),
+      (current) => {
+        if (!current) return current;
+        return {
+          ...current,
+          alerts: current.alerts.filter(
+            (alert) => alert.announcementId !== announcementId,
+          ),
+        };
+      },
+    );
+  }
 
   const alerts = query.data?.alerts ?? [];
   if (alerts.length === 0) return null;
@@ -96,9 +180,20 @@ export function ActivityBanner({
   return (
     <div className="border-border/50 bg-background/80 border-b">
       <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-2.5 sm:px-6">
-        {alerts.slice(0, 2).map((alert) => (
-          <AlertCard key={alert.id} alert={alert} />
-        ))}
+        {alerts
+          .slice(0, 3)
+          .map((alert) =>
+            alert.kind === "announcement" ? (
+              <AnnouncementAlertCard
+                key={alert.id}
+                alert={alert}
+                dismissing={dismissingId === alert.announcementId}
+                onDismiss={(id) => void dismissAnnouncement(id)}
+              />
+            ) : (
+              <RentalAlertCard key={alert.id} alert={alert} />
+            ),
+          )}
       </div>
     </div>
   );

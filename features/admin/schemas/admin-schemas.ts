@@ -43,15 +43,38 @@ export const adminSettingsSchema = z.object({
   platformAnnouncement: z.string().max(500).nullable(),
 });
 
-export const adminAnnouncementSchema = z.object({
+const adminAnnouncementBaseSchema = z.object({
   title: z.string().trim().min(2).max(120),
   body: z.string().trim().min(2).max(2000),
-  target: z.enum(["ALL", "BUYERS", "SELLERS", "ADMINS"]),
+  target: z.enum(["ALL", "BUYERS", "SELLERS", "ADMINS", "USER"]),
+  targetUserId: z.string().uuid().nullable().optional(),
   dismissible: z.boolean(),
   isActive: z.boolean(),
   startsAt: z.string().datetime().optional(),
   endsAt: z.string().datetime().nullable().optional(),
 });
+
+function requireUserTarget<
+  T extends { target: string; targetUserId?: string | null },
+>(data: T, ctx: z.RefinementCtx) {
+  if (data.target === "USER" && !data.targetUserId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Select a user for a user-targeted announcement.",
+      path: ["targetUserId"],
+    });
+  }
+}
+
+export const adminAnnouncementSchema =
+  adminAnnouncementBaseSchema.superRefine(requireUserTarget);
+
+export const adminAnnouncementUpdateSchema = adminAnnouncementBaseSchema
+  .extend({
+    id: z.string().uuid(),
+    notifyUsers: z.boolean().default(true),
+  })
+  .superRefine(requireUserTarget);
 
 export const adminSearchSchema = z.object({
   q: z.string().trim().min(2).max(100),

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AdminUserAnnouncementForm } from "@/features/admin/components/admin-user-announcement-form";
 import { DataTable } from "@/features/admin/components/data-table";
 
 type AdminUserDetailClientProps = {
@@ -39,6 +40,11 @@ export function AdminUserDetailClient({ user }: AdminUserDetailClientProps) {
           value={new Date(user.memberSince).toLocaleDateString()}
         />
       </div>
+
+      <AdminUserAnnouncementForm
+        userId={user.id}
+        userLabel={user.displayName}
+      />
 
       <Section title="Listings">
         <DataTable

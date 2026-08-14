@@ -17,6 +17,7 @@ export {
 export {
   adminSearchAction,
   createAnnouncementAction,
+  updateAnnouncementAction,
   updatePlatformSettingsAction,
 } from "./actions/settings-actions";
 export {

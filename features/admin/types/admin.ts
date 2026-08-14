@@ -130,6 +130,8 @@ export type AnnouncementView = {
   title: string;
   body: string;
   target: AnnouncementTarget;
+  targetUserId: string | null;
+  targetUserLabel: string | null;
   dismissible: boolean;
   isActive: boolean;
   startsAt: string;
