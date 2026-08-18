@@ -7,22 +7,24 @@ import { BACK_FALLBACKS } from "@/components/navigation/back-fallbacks";
 import { LazyListingMap } from "@/features/maps/components/lazy-listing-map";
 import { getUnavailableDateHints } from "@/features/rentals";
 import { RentNowControls } from "@/features/rentals/components/rent-now-controls";
-import {
-  getListingOriginCoords,
-  getNearbyListings,
-  getPublicListingBySlug,
-  getRelatedListings,
-  incrementListingViewCount,
-  isListingWishlisted,
-} from "@/features/search";
+import { getPublicListingBySlug } from "@/features/search";
 import { AvailabilityCalendar } from "@/features/search/components/availability-calendar";
 import { MarketplaceErrorState } from "@/features/search/components/error-state";
 import { ListingReportButton } from "@/features/search/components/listing-actions";
+import {
+  DeferredListingNearbySection,
+  DeferredListingRelatedSection,
+} from "@/features/search/components/listing-detail-sections";
 import { ListingGallery } from "@/features/search/components/listing-gallery";
-import { ListingGrid } from "@/features/search/components/listing-grid";
 import { RecentlyViewedTracker } from "@/features/search/components/recently-viewed-tracker";
 import { SellerCard } from "@/features/search/components/seller-card";
 import { ShareMenu } from "@/features/search/components/share-menu";
+import {
+  getListingDetailRawBySlug,
+  incrementListingViewCount,
+  isListingWishlisted,
+  mapRawListingToPublicView,
+} from "@/features/search/queries/listing-detail";
 import {
   formatDeposit,
   formatRentPrice,
@@ -70,44 +72,28 @@ export default async function ListingDetailPage({
   params,
 }: ListingDetailPageProps) {
   const { slug } = await params;
-  const profile = await getCurrentProfile();
 
   try {
-    // Raw fetch cached by slug; privacy mapping applies per viewer (owner vs public).
-    const listingBase = await getPublicListingBySlug(slug, {
-      viewerUserId: profile?.id ?? null,
-    });
-    if (!listingBase) {
+    const [profile, rawListing] = await Promise.all([
+      getCurrentProfile(),
+      getListingDetailRawBySlug(slug),
+    ]);
+
+    if (!rawListing) {
       notFound();
     }
 
-    const origin = await getListingOriginCoords(slug);
+    const listingBase = mapRawListingToPublicView(rawListing, {
+      viewerUserId: profile?.id ?? null,
+    });
 
-    const [isWishlisted, related, nearby, hints] = await withPerf(
-      "listing.detail.extras",
-      () =>
-        Promise.all([
-          profile
-            ? isListingWishlisted(listingBase.id, profile.id)
-            : Promise.resolve(false),
-          getRelatedListings(
-            listingBase.id,
-            listingBase.categoryId,
-            4,
-            profile?.id ?? null,
-          ),
-          origin
-            ? getNearbyListings({
-                listingId: origin.id,
-                lat: origin.lat,
-                lng: origin.lng,
-                radiusKm: 10,
-                take: 4,
-                wishlistUserId: profile?.id ?? null,
-              })
-            : Promise.resolve([]),
-          getUnavailableDateHints(listingBase.id, listingBase.availability),
-        ]),
+    const [isWishlisted, hints] = await withPerf("listing.detail.extras", () =>
+      Promise.all([
+        profile
+          ? isListingWishlisted(listingBase.id, profile.id)
+          : Promise.resolve(false),
+        getUnavailableDateHints(listingBase.id, listingBase.availability),
+      ]),
     );
 
     const listing = { ...listingBase, isWishlisted };
@@ -117,6 +103,8 @@ export default async function ListingDetailPage({
     });
 
     const isOwner = profile?.id === listing.sellerId;
+    const isAuthenticated = Boolean(profile);
+    const viewerUserId = profile?.id ?? null;
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const listingUrl = `${baseUrl}/listings/${listing.slug}`;
@@ -192,7 +180,7 @@ export default async function ListingDetailPage({
                   <WishlistButton
                     listingId={listing.id}
                     initialWishlisted={listing.isWishlisted}
-                    isAuthenticated={Boolean(profile)}
+                    isAuthenticated={isAuthenticated}
                   />
                   <ShareMenu title={listing.title} slug={listing.slug} />
                   <ListingReportButton
@@ -236,29 +224,20 @@ export default async function ListingDetailPage({
               }}
             />
 
-            {nearby.length > 0 ? (
-              <section className="space-y-4 pt-2">
-                <h2 className="text-xl font-semibold tracking-tight">
-                  Nearby alternatives
-                </h2>
-                <ListingGrid
-                  listings={nearby}
-                  isAuthenticated={Boolean(profile)}
-                />
-              </section>
-            ) : null}
+            <DeferredListingNearbySection
+              listingId={rawListing.id}
+              lat={rawListing.lat}
+              lng={rawListing.lng}
+              isAuthenticated={isAuthenticated}
+              viewerUserId={viewerUserId}
+            />
 
-            {related.length > 0 ? (
-              <section className="space-y-4 pt-2">
-                <h2 className="text-xl font-semibold tracking-tight">
-                  Similar listings
-                </h2>
-                <ListingGrid
-                  listings={related}
-                  isAuthenticated={Boolean(profile)}
-                />
-              </section>
-            ) : null}
+            <DeferredListingRelatedSection
+              listingId={listing.id}
+              categoryId={listing.categoryId}
+              isAuthenticated={isAuthenticated}
+              viewerUserId={viewerUserId}
+            />
           </div>
 
           <div className="space-y-4 lg:sticky lg:top-24 lg:self-start">
@@ -281,7 +260,7 @@ export default async function ListingDetailPage({
               <RentNowControls
                 listing={listing}
                 hints={hints}
-                isAuthenticated={Boolean(profile)}
+                isAuthenticated={isAuthenticated}
                 isOwner={isOwner}
               />
             </div>

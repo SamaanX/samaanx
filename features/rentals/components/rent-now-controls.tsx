@@ -1,13 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import type { AvailabilityHints } from "@/domain/rental";
-import { RentalRequestDialog } from "@/features/rentals/components/rental-request-dialog";
 import { formatRentPrice } from "@/features/search/services/format";
 import type { PublicListingDetailView } from "@/features/search/types/marketplace";
+
+const RentalRequestDialog = dynamic(
+  () =>
+    import("@/features/rentals/components/rental-request-dialog").then(
+      (m) => m.RentalRequestDialog,
+    ),
+  { ssr: false },
+);
 
 type DateHints = AvailabilityHints;
 
@@ -89,12 +97,14 @@ export function RentNowControls({
         </div>
       </div>
 
-      <RentalRequestDialog
-        open={open}
-        onClose={() => setOpen(false)}
-        listing={listing}
-        hints={hints}
-      />
+      {open ? (
+        <RentalRequestDialog
+          open={open}
+          onClose={() => setOpen(false)}
+          listing={listing}
+          hints={hints}
+        />
+      ) : null}
     </>
   );
 }

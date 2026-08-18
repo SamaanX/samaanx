@@ -18,6 +18,8 @@ type ListingCardProps = {
   isAuthenticated: boolean;
   /** Above-the-fold cards only — improves LCP. */
   priority?: boolean;
+  /** Disable motion on below-fold grids (listing detail). */
+  animated?: boolean;
 };
 
 const availabilityStyles = {
@@ -31,16 +33,13 @@ export function ListingCard({
   listing,
   isAuthenticated,
   priority = false,
+  animated = true,
 }: ListingCardProps) {
-  return (
-    <motion.article
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -3 }}
-      transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-      className="group border-border/80 bg-card relative overflow-hidden rounded-2xl border shadow-[var(--rp-shadow-sm)]"
-    >
+  const cardClassName =
+    "group border-border/80 bg-card relative overflow-hidden rounded-2xl border shadow-[var(--rp-shadow-sm)]";
+
+  const inner = (
+    <>
       <Link
         href={`/listings/${listing.slug}`}
         className="absolute inset-0 z-10"
@@ -143,6 +142,23 @@ export function ListingCard({
             : ""}
         </p>
       </div>
+    </>
+  );
+
+  if (!animated) {
+    return <article className={cardClassName}>{inner}</article>;
+  }
+
+  return (
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -3 }}
+      transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+      className={cardClassName}
+    >
+      {inner}
     </motion.article>
   );
 }

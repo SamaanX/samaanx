@@ -83,6 +83,7 @@ export function ListingGallery({ images, title }: ListingGalleryProps) {
                 src={image.url}
                 alt=""
                 fill
+                loading={imageIndex === index ? undefined : "lazy"}
                 className="object-cover"
                 sizes="64px"
               />

@@ -497,7 +497,7 @@ export async function getNearbyListings(params: {
       lat: { gte: box.minLat, lte: box.maxLat },
       lng: { gte: box.minLng, lte: box.maxLng },
     },
-    take: Math.min(80, take * 12),
+    take: Math.min(32, Math.max(take * 6, take + 8)),
     select: cardSelect(params.wishlistUserId ?? null),
   });
 

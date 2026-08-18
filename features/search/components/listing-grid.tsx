@@ -4,9 +4,14 @@ import type { PublicListingCardView } from "@/features/search/types/marketplace"
 type ListingGridProps = {
   listings: PublicListingCardView[];
   isAuthenticated: boolean;
+  animated?: boolean;
 };
 
-export function ListingGrid({ listings, isAuthenticated }: ListingGridProps) {
+export function ListingGrid({
+  listings,
+  isAuthenticated,
+  animated = true,
+}: ListingGridProps) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {listings.map((listing, index) => (
@@ -15,6 +20,7 @@ export function ListingGrid({ listings, isAuthenticated }: ListingGridProps) {
           listing={listing}
           isAuthenticated={isAuthenticated}
           priority={index < 2}
+          animated={animated}
         />
       ))}
     </div>
