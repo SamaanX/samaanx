@@ -51,5 +51,6 @@ export async function GET(request: Request) {
   }
 
   const redirectPath = next.startsWith("/") ? next : "/";
-  return NextResponse.redirect(`${origin}${redirectPath}`);
+  const separator = redirectPath.includes("?") ? "&" : "?";
+  return NextResponse.redirect(`${origin}${redirectPath}${separator}push=1`);
 }

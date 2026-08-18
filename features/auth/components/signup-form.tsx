@@ -19,6 +19,7 @@ import {
   signUpFormSchema,
   type SignUpFormValues,
 } from "@/features/auth/schemas/auth-forms";
+import { markPushPromptPending } from "@/features/notifications/lib/push-session";
 import { trackEvent } from "@/lib/analytics/events";
 
 export function SignupForm() {
@@ -65,8 +66,9 @@ export function SignupForm() {
     }
 
     trackEvent("signup");
+    markPushPromptPending();
     // Full navigation so marketplace layout re-reads the new auth cookies.
-    window.location.assign("/");
+    window.location.assign("/?welcome=1&push=1");
   }
 
   return (

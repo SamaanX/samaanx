@@ -110,3 +110,66 @@ export async function getCurrentPushEndpoint(): Promise<string | null> {
     return null;
   }
 }
+
+/** Save existing browser subscription to SamaanX (idempotent). */
+export async function syncPushSubscriptionToServer(): Promise<boolean> {
+  if (!getPushCapability().supported) return false;
+
+  try {
+    const registration = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    const json = subscription?.toJSON();
+    if (!json?.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+      return false;
+    }
+
+    const { savePushSubscriptionAction } =
+      await import("@/features/notifications/actions/push-subscription");
+    const { updateNotificationPreferencesAction } =
+      await import("@/features/notifications/actions/notification-preferences");
+
+    const saved = await savePushSubscriptionAction({
+      endpoint: json.endpoint,
+      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      userAgent: navigator.userAgent.slice(0, 512),
+    });
+    if (!saved.ok) return false;
+
+    await updateNotificationPreferencesAction({ notifyPushEnabled: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Request permission, subscribe, and persist — one user tap. */
+export async function enablePushForCurrentDevice(): Promise<{
+  ok: boolean;
+  reason?: string;
+}> {
+  const result = await subscribeToPushNotifications();
+  if (!result.ok) {
+    if (result.reason === "denied") {
+      return { ok: false, reason: "denied" };
+    }
+    return { ok: false, reason: result.reason };
+  }
+
+  const { savePushSubscriptionAction } =
+    await import("@/features/notifications/actions/push-subscription");
+  const { updateNotificationPreferencesAction } =
+    await import("@/features/notifications/actions/notification-preferences");
+
+  const saved = await savePushSubscriptionAction({
+    endpoint: result.endpoint,
+    keys: result.keys,
+    userAgent: navigator.userAgent.slice(0, 512),
+  });
+  if (!saved.ok) {
+    return { ok: false, reason: "save_failed" };
+  }
+
+  await updateNotificationPreferencesAction({ notifyPushEnabled: true });
+  return { ok: true };
+}

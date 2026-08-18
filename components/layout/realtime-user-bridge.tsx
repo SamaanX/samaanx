@@ -2,6 +2,10 @@
 
 import * as React from "react";
 
+import {
+  AutoPushPrompt,
+  PushPromptUrlHydrator,
+} from "@/features/notifications/components/auto-push-prompt";
 import { RealtimeSyncProvider } from "@/providers/realtime-sync-provider";
 
 type RealtimeUserContextValue = {
@@ -33,7 +37,11 @@ export function RealtimeUserBridge({
 
   return (
     <RealtimeUserContext.Provider value={value}>
-      <RealtimeSyncProvider userId={userId}>{children}</RealtimeSyncProvider>
+      <RealtimeSyncProvider userId={userId}>
+        <PushPromptUrlHydrator />
+        <AutoPushPrompt userId={userId} />
+        {children}
+      </RealtimeSyncProvider>
     </RealtimeUserContext.Provider>
   );
 }

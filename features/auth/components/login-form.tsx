@@ -21,6 +21,7 @@ import {
   signInFormSchema,
   type SignInFormValues,
 } from "@/features/auth/schemas/auth-forms";
+import { markPushPromptPending } from "@/features/notifications/lib/push-session";
 import { trackEvent } from "@/lib/analytics/events";
 
 export function LoginForm() {
@@ -64,6 +65,7 @@ export function LoginForm() {
     }
 
     trackEvent("login");
+    markPushPromptPending();
     const redirectTo =
       nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/";
     // Full navigation so marketplace layout re-reads the new auth cookies.

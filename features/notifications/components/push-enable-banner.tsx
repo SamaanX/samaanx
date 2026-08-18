@@ -4,14 +4,10 @@ import { BellRing } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { dismissPushPromptAction } from "@/features/notifications/actions/notification-preferences";
 import {
-  dismissPushPromptAction,
-  updateNotificationPreferencesAction,
-} from "@/features/notifications/actions/notification-preferences";
-import { savePushSubscriptionAction } from "@/features/notifications/actions/push-subscription";
-import {
+  enablePushForCurrentDevice,
   getPushCapability,
-  subscribeToPushNotifications,
 } from "@/features/notifications/lib/subscribe-push";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +45,7 @@ export function PushEnableBanner({ className }: { className?: string }) {
   async function enablePush() {
     setLoading(true);
     try {
-      const result = await subscribeToPushNotifications();
+      const result = await enablePushForCurrentDevice();
       if (!result.ok) {
         if (result.reason === "denied") {
           await dismissPushPromptAction();
@@ -57,15 +53,6 @@ export function PushEnableBanner({ className }: { className?: string }) {
         }
         return;
       }
-
-      const saved = await savePushSubscriptionAction({
-        endpoint: result.endpoint,
-        keys: result.keys,
-        userAgent: navigator.userAgent.slice(0, 512),
-      });
-      if (!saved.ok) return;
-
-      await updateNotificationPreferencesAction({ notifyPushEnabled: true });
       setVisible(false);
     } finally {
       setLoading(false);
