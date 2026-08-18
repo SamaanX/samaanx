@@ -18,6 +18,7 @@ export function AdminUserAnnouncementForm({
   const router = useRouter();
   const [title, setTitle] = React.useState("");
   const [body, setBody] = React.useState("");
+  const [targetUrl, setTargetUrl] = React.useState("/");
   const [saving, setSaving] = React.useState(false);
 
   async function send() {
@@ -25,6 +26,7 @@ export function AdminUserAnnouncementForm({
     const res = await createAnnouncementAction({
       title,
       body,
+      targetUrl: targetUrl.trim() || null,
       target: "USER",
       targetUserId: userId,
       dismissible: true,
@@ -37,9 +39,12 @@ export function AdminUserAnnouncementForm({
       return;
     }
 
-    toast.success(`Announcement sent to ${userLabel}.`);
+    toast.success(
+      `Announcement queued for ${userLabel}. In-app and push delivery run in the background.`,
+    );
     setTitle("");
     setBody("");
+    setTargetUrl("/");
     router.refresh();
   }
 
@@ -48,7 +53,8 @@ export function AdminUserAnnouncementForm({
       <div>
         <h2 className="text-lg font-semibold">Send announcement</h2>
         <p className="text-muted-foreground text-sm">
-          Notify {userLabel} on the home screen and in their notification inbox.
+          Notify {userLabel} on the home screen, notification inbox, and push
+          devices (if enabled).
         </p>
       </div>
       <input
@@ -63,11 +69,17 @@ export function AdminUserAnnouncementForm({
         placeholder="Message"
         className="border-border min-h-24 w-full rounded-lg border px-3 py-2 text-sm"
       />
+      <input
+        value={targetUrl}
+        onChange={(e) => setTargetUrl(e.target.value)}
+        placeholder="Target URL (optional) — e.g. /rentals"
+        className="border-border w-full rounded-lg border px-3 py-2 text-sm"
+      />
       <button
         type="button"
         disabled={saving}
         onClick={() => void send()}
-        className="bg-brand-gradient rounded-lg px-4 py-2 text-sm font-medium text-white"
+        className="bg-brand-gradient rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
       >
         {saving ? "Sending…" : "Send to this user"}
       </button>

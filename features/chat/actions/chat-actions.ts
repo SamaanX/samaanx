@@ -123,6 +123,7 @@ function scheduleChatMessageNotification(params: {
           rentalId: params.rentalId,
           listingId: params.listingId,
           payload: { conversationId: params.conversationId },
+          dedupeSeed: params.messageId,
         }),
       ]);
     } catch (error) {

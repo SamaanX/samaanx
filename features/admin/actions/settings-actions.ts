@@ -91,6 +91,7 @@ export async function createAnnouncementAction(
       data: {
         title: parsed.data.title,
         body: parsed.data.body,
+        targetUrl: parsed.data.targetUrl?.trim() || null,
         target: parsed.data.target,
         targetUserId:
           parsed.data.target === "USER" ? parsed.data.targetUserId : null,
@@ -110,6 +111,7 @@ export async function createAnnouncementAction(
         announcementId: row.id,
         title: parsed.data.title,
         body: parsed.data.body,
+        targetUrl: parsed.data.targetUrl,
         target: parsed.data.target,
         targetUserId: parsed.data.targetUserId,
       });
@@ -166,6 +168,7 @@ export async function updateAnnouncementAction(
       data: {
         title: parsed.data.title,
         body: parsed.data.body,
+        targetUrl: parsed.data.targetUrl?.trim() || null,
         target: parsed.data.target,
         targetUserId:
           parsed.data.target === "USER" ? parsed.data.targetUserId : null,
@@ -196,6 +199,7 @@ export async function updateAnnouncementAction(
         announcementId: parsed.data.id,
         title: parsed.data.title,
         body: parsed.data.body,
+        targetUrl: parsed.data.targetUrl,
         target: parsed.data.target,
         targetUserId: parsed.data.targetUserId,
       });

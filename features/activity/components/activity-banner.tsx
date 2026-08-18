@@ -96,11 +96,11 @@ function AnnouncementAlertCard({
             </p>
           ) : null}
           <Link
-            href="/notifications"
+            href={alert.href ?? "/notifications"}
             prefetch
             className="text-brand-blue mt-2 inline-flex items-center gap-1 text-xs font-semibold hover:underline"
           >
-            View in notifications
+            {alert.ctaLabel ?? "Learn more"}
             <ArrowRight className="size-3.5" aria-hidden />
           </Link>
         </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ensureProfileForUser } from "@/features/auth/services/profile-sync";
+import { sendWelcomeForUser } from "@/features/auth/services/welcome-notify";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 
@@ -25,9 +26,20 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login?error=auth_callback`);
   }
 
-  if (data.user && !data.user.is_anonymous) {
+  if (data.user && !data.user.is_anonymous && data.user.email) {
     try {
       await ensureProfileForUser(data.user);
+      const displayName =
+        typeof data.user.user_metadata?.full_name === "string"
+          ? data.user.user_metadata.full_name
+          : typeof data.user.user_metadata?.name === "string"
+            ? data.user.user_metadata.name
+            : (data.user.email.split("@")[0] ?? "there");
+      void sendWelcomeForUser({
+        userId: data.user.id,
+        email: data.user.email,
+        displayName,
+      });
     } catch (profileError) {
       logger.error("Profile sync failed after auth callback", {
         message:

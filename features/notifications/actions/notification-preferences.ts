@@ -8,6 +8,8 @@ import { prisma } from "@/lib/db/prisma";
 import { isEmailConfigured } from "@/lib/email/client";
 import { sendBrandedEmail } from "@/lib/email/send";
 import { buildWelcomeEmail } from "@/lib/email/types";
+import { getVapidPublicKey } from "@/lib/push/public";
+import { sendPushToUser } from "@/lib/push/send";
 
 const preferencesSchema = z.object({
   notifyEmailEnabled: z.boolean().optional(),
@@ -96,6 +98,49 @@ export async function sendTestEmailAction(): Promise<{
     }
 
     return { ok: true, to: prefs.email };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
+/** Sends a one-off test push to the logged-in user's registered devices. */
+export async function sendTestPushAction(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  try {
+    const { profile } = await requireUser();
+
+    if (!getVapidPublicKey()) {
+      return {
+        ok: false,
+        error: "NEXT_PUBLIC_VAPID_PUBLIC_KEY is not configured.",
+      };
+    }
+
+    const subCount = await prisma.pushSubscription.count({
+      where: { userId: profile.id },
+    });
+    if (subCount === 0) {
+      return {
+        ok: false,
+        error:
+          "No push subscription on this account. Enable browser push first.",
+      };
+    }
+
+    await sendPushToUser(profile.id, {
+      title: "SamaanX test notification",
+      body: "If you see this, Web Push is working on this device.",
+      url: "/notifications",
+      tag: `test:${profile.id}:${Date.now()}`,
+      type: "SYSTEM",
+    });
+
+    return { ok: true };
   } catch (error) {
     return {
       ok: false,

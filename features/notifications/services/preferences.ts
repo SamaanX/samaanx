@@ -116,9 +116,32 @@ export function shouldSendChatEmail(
 export function shouldSendPushForType(
   type: NotificationType,
   prefs: NotificationPreferencesView,
+  payload?: unknown,
 ): boolean {
   if (type === "SECURITY_ALERT") return true;
   if (type === "NEW_MESSAGE") return prefs.notifyChatEnabled;
   if (RENTAL_TYPES.includes(type)) return prefs.notifyRentalEnabled;
+  if (type === "SYSTEM" && isReviewReceivedPayload(payload)) {
+    return prefs.notifyRentalEnabled;
+  }
+  if (type === "SYSTEM" && isAnnouncementPayload(payload)) {
+    return prefs.notifyPushEnabled;
+  }
   return PUSH_TYPES.includes(type);
+}
+
+function isAnnouncementPayload(payload: unknown): boolean {
+  return (
+    Boolean(payload) &&
+    typeof payload === "object" &&
+    (payload as { kind?: unknown }).kind === "announcement"
+  );
+}
+
+function isReviewReceivedPayload(payload: unknown): boolean {
+  return (
+    Boolean(payload) &&
+    typeof payload === "object" &&
+    (payload as { kind?: unknown }).kind === "review_received"
+  );
 }

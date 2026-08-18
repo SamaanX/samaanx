@@ -129,6 +129,7 @@ export type AnnouncementView = {
   id: string;
   title: string;
   body: string;
+  targetUrl: string | null;
   target: AnnouncementTarget;
   targetUserId: string | null;
   targetUserLabel: string | null;
@@ -136,6 +137,16 @@ export type AnnouncementView = {
   isActive: boolean;
   startsAt: string;
   endsAt: string | null;
+  delivery: AnnouncementDeliveryView | null;
+};
+
+export type AnnouncementDeliveryView = {
+  recipientCount: number;
+  pushAttempted: number;
+  pushSuccess: number;
+  pushFailed: number;
+  expiredRemoved: number;
+  completedAt: string | null;
 };
 
 export type Paginated<T> = {

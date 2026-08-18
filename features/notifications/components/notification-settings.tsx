@@ -6,8 +6,20 @@ import * as React from "react";
 import {
   getNotificationPreferencesAction,
   sendTestEmailAction,
+  sendTestPushAction,
   updateNotificationPreferencesAction,
 } from "@/features/notifications/actions/notification-preferences";
+import {
+  removeAllPushSubscriptionsAction,
+  removePushSubscriptionAction,
+  savePushSubscriptionAction,
+} from "@/features/notifications/actions/push-subscription";
+import {
+  getCurrentPushEndpoint,
+  getPushCapability,
+  subscribeToPushNotifications,
+  unsubscribeFromPushNotifications,
+} from "@/features/notifications/lib/subscribe-push";
 import type { NotificationPreferencesView } from "@/features/notifications/services/preferences";
 import { FormMessage } from "@/features/profile/components/form-message";
 import { LoadingButton } from "@/features/profile/components/loading-button";
@@ -63,6 +75,19 @@ function ToggleRow({
   );
 }
 
+function pushStatusLabel(permission: NotificationPermission | "unsupported") {
+  switch (permission) {
+    case "granted":
+      return "Allowed in this browser";
+    case "denied":
+      return "Blocked — enable in browser site settings";
+    case "default":
+      return "Not requested yet";
+    default:
+      return "Not supported on this device/browser";
+  }
+}
+
 export function NotificationSettings() {
   const [prefs, setPrefs] = React.useState<NotificationPreferencesView | null>(
     null,
@@ -72,8 +97,17 @@ export function NotificationSettings() {
   const [message, setMessage] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [testingEmail, setTestingEmail] = React.useState(false);
+  const [testingPush, setTestingPush] = React.useState(false);
+  const [pushPermission, setPushPermission] = React.useState<
+    NotificationPermission | "unsupported"
+  >("default");
+  const [pushSupported, setPushSupported] = React.useState(false);
 
   React.useEffect(() => {
+    const capability = getPushCapability();
+    setPushSupported(capability.supported && capability.vapidConfigured);
+    setPushPermission(capability.permission);
+
     void getNotificationPreferencesAction().then((data) => {
       setPrefs(data);
       setLoading(false);
@@ -99,6 +133,70 @@ export function NotificationSettings() {
     setMessage("Notification settings saved.");
   }
 
+  async function togglePush(enabled: boolean): Promise<void> {
+    setError(null);
+    setMessage(null);
+    setSaving(true);
+
+    if (enabled) {
+      const capability = getPushCapability();
+      if (!capability.supported || !capability.vapidConfigured) {
+        setSaving(false);
+        setError("Push notifications are not available on this browser.");
+        return;
+      }
+
+      const result = await subscribeToPushNotifications();
+      setPushPermission(Notification.permission);
+
+      if (!result.ok) {
+        setSaving(false);
+        if (result.reason === "denied") {
+          setError(
+            "Browser blocked notifications. Enable them in your browser site settings for SamaanX.",
+          );
+        } else if (
+          result.reason === "unsupported" ||
+          result.reason === "no_vapid"
+        ) {
+          setError("Push notifications are not available right now.");
+        } else {
+          setError("Could not enable push notifications.");
+        }
+        return;
+      }
+
+      const saved = await savePushSubscriptionAction({
+        endpoint: result.endpoint,
+        keys: result.keys,
+        userAgent: navigator.userAgent.slice(0, 512),
+      });
+
+      if (!saved.ok) {
+        setSaving(false);
+        setError("Could not save push subscription.");
+        return;
+      }
+
+      await update({ notifyPushEnabled: true });
+      setMessage("Browser push enabled for this device.");
+      setSaving(false);
+      return;
+    }
+
+    const endpoint = await getCurrentPushEndpoint();
+    if (endpoint) {
+      await removePushSubscriptionAction(endpoint);
+    }
+    await unsubscribeFromPushNotifications();
+    await removeAllPushSubscriptionsAction();
+    setPrefs((current) =>
+      current ? { ...current, notifyPushEnabled: false } : current,
+    );
+    setMessage("Browser push disabled on this device.");
+    setSaving(false);
+  }
+
   async function sendTestEmail(): Promise<void> {
     setError(null);
     setMessage(null);
@@ -114,6 +212,19 @@ export function NotificationSettings() {
         ? `Test email sent to ${result.to}. Check inbox and Resend dashboard.`
         : "Test email sent.",
     );
+  }
+
+  async function sendTestPush(): Promise<void> {
+    setError(null);
+    setMessage(null);
+    setTestingPush(true);
+    const result = await sendTestPushAction();
+    setTestingPush(false);
+    if (!result.ok) {
+      setError(result.error ?? "Test push failed.");
+      return;
+    }
+    setMessage("Test push sent — check your device notification tray.");
   }
 
   if (loading || !prefs) {
@@ -137,6 +248,8 @@ export function NotificationSettings() {
       </section>
     );
   }
+
+  const pushBlocked = pushPermission === "denied";
 
   return (
     <section
@@ -165,13 +278,25 @@ export function NotificationSettings() {
           checked={prefs.notifyEmailEnabled}
           onChange={(checked) => void update({ notifyEmailEnabled: checked })}
         />
-        <ToggleRow
-          icon={<Bell className="size-4" aria-hidden />}
-          title="Browser push"
-          description="Instant alerts when SamaanX is in the background."
-          checked={prefs.notifyPushEnabled}
-          onChange={(checked) => void update({ notifyPushEnabled: checked })}
-        />
+        <div>
+          <ToggleRow
+            icon={<Bell className="size-4" aria-hidden />}
+            title="Browser push"
+            description={
+              pushSupported
+                ? "Instant alerts when SamaanX is in the background."
+                : "Requires a supported browser and installed PWA on mobile."
+            }
+            checked={prefs.notifyPushEnabled}
+            disabled={!pushSupported || pushBlocked || saving}
+            onChange={(checked) => void togglePush(checked)}
+          />
+          {pushSupported ? (
+            <p className="text-muted-foreground px-4 pb-3 text-xs sm:px-5">
+              Browser permission: {pushStatusLabel(pushPermission)}
+            </p>
+          ) : null}
+        </div>
         <ToggleRow
           icon={<MessageSquare className="size-4" aria-hidden />}
           title="Chat notifications"
@@ -224,9 +349,21 @@ export function NotificationSettings() {
         >
           Send test email
         </LoadingButton>
+        {pushSupported ? (
+          <LoadingButton
+            type="button"
+            variant="outline"
+            loading={testingPush}
+            disabled={saving || !prefs.notifyPushEnabled || pushBlocked}
+            className="w-full"
+            onClick={() => void sendTestPush()}
+          >
+            Send test push
+          </LoadingButton>
+        ) : null}
         <p className="text-muted-foreground text-xs">
-          Sends to your SamaanX account email (not EMAIL_FROM). Resend sandbox
-          only delivers to the email you used to sign up for Resend.
+          Test notifications go to your account only. On iOS, push requires the
+          installed PWA (iOS 16.4+) with permission granted.
         </p>
         <FormMessage message={error} />
         {message ? (

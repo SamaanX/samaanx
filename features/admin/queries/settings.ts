@@ -32,12 +32,19 @@ export async function getAdminAnnouncements(): Promise<AnnouncementView[]> {
       id: true,
       title: true,
       body: true,
+      targetUrl: true,
       target: true,
       targetUserId: true,
       dismissible: true,
       isActive: true,
       startsAt: true,
       endsAt: true,
+      deliveryRecipientCount: true,
+      deliveryPushAttempted: true,
+      deliveryPushSuccess: true,
+      deliveryPushFailed: true,
+      deliveryExpiredRemoved: true,
+      deliveryCompletedAt: true,
       targetUser: {
         select: { displayName: true, email: true },
       },
@@ -48,6 +55,7 @@ export async function getAdminAnnouncements(): Promise<AnnouncementView[]> {
     id: r.id,
     title: r.title,
     body: r.body,
+    targetUrl: r.targetUrl,
     target: r.target,
     targetUserId: r.targetUserId,
     targetUserLabel: r.targetUser
@@ -57,6 +65,17 @@ export async function getAdminAnnouncements(): Promise<AnnouncementView[]> {
     isActive: r.isActive,
     startsAt: r.startsAt.toISOString(),
     endsAt: r.endsAt?.toISOString() ?? null,
+    delivery:
+      r.deliveryRecipientCount != null
+        ? {
+            recipientCount: r.deliveryRecipientCount,
+            pushAttempted: r.deliveryPushAttempted ?? 0,
+            pushSuccess: r.deliveryPushSuccess ?? 0,
+            pushFailed: r.deliveryPushFailed ?? 0,
+            expiredRemoved: r.deliveryExpiredRemoved ?? 0,
+            completedAt: r.deliveryCompletedAt?.toISOString() ?? null,
+          }
+        : null,
   }));
 }
 

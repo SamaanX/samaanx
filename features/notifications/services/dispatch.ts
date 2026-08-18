@@ -24,6 +24,7 @@ export type ChannelDeliveryEvent = {
   rentalId?: string | null;
   listingId?: string | null;
   payload?: unknown;
+  notificationId?: string;
   /** Stable key fragment — combined with userId+type for dedupe. */
   dedupeSeed?: string;
 };
@@ -90,12 +91,18 @@ export async function deliverNotificationChannels(
       }
     }
 
-    if (prefs.notifyPushEnabled && shouldSendPushForType(event.type, prefs)) {
+    if (
+      prefs.notifyPushEnabled &&
+      shouldSendPushForType(event.type, prefs, event.payload)
+    ) {
       void sendPushToUser(event.userId, {
         title: event.title,
         body: event.body,
         url: href,
         tag: dedupeKey,
+        dedupeKey: `push:${dedupeKey}`,
+        notificationId: event.notificationId,
+        type: event.type,
       });
     }
   } catch (error) {
@@ -122,6 +129,8 @@ export function notifyParamsToDeliveryEvent(params: {
   rentalId: string;
   listingId: string;
   payload?: unknown;
+  dedupeSeed?: string;
+  notificationId?: string;
 }): ChannelDeliveryEvent {
   return {
     userId: params.userId,
@@ -131,7 +140,8 @@ export function notifyParamsToDeliveryEvent(params: {
     rentalId: params.rentalId,
     listingId: params.listingId,
     payload: params.payload,
-    dedupeSeed: params.rentalId,
+    dedupeSeed: params.dedupeSeed ?? params.rentalId,
+    notificationId: params.notificationId,
   };
 }
 

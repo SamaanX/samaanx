@@ -55,6 +55,8 @@ export const getCriticalActivitySnapshot = cache(
       description: item.body,
       dismissible: item.dismissible,
       announcementId: item.id,
+      href: item.targetUrl?.startsWith("/") ? item.targetUrl : "/notifications",
+      ctaLabel: "Learn more",
       priority: index + 1,
     }));
     let sellerPendingCount = 0;

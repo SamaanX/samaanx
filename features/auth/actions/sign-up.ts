@@ -3,8 +3,8 @@
 import { signUpSchema } from "@/features/auth/schemas/auth";
 import { toAuthActionError } from "@/features/auth/services/auth-errors";
 import { ensureProfileForUser } from "@/features/auth/services/profile-sync";
+import { sendWelcomeForUser } from "@/features/auth/services/welcome-notify";
 import type { AuthActionResult } from "@/features/auth/types/auth";
-import { sendWelcomeEmailForUser } from "@/features/jobs/processor";
 import { createClient } from "@/lib/supabase/server";
 
 export type SignUpResult = {
@@ -95,14 +95,14 @@ export async function signUpAction(
 
     if (currentUser && !currentUser.is_anonymous) {
       await ensureProfileForUser(currentUser, { displayName });
-      void sendWelcomeEmailForUser({
+      void sendWelcomeForUser({
         userId: currentUser.id,
         email: currentUser.email ?? email,
         displayName: displayName ?? currentUser.email?.split("@")[0] ?? "there",
       });
     } else {
       await ensureProfileForUser(data.user, { displayName });
-      void sendWelcomeEmailForUser({
+      void sendWelcomeForUser({
         userId: data.user.id,
         email: data.user.email ?? email,
         displayName: displayName ?? email.split("@")[0] ?? "there",

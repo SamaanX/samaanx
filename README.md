@@ -88,6 +88,8 @@ See `.env.example`. Required for a working local shell:
 
 Never commit `.env.local` or secrets.
 
+**Web Push (production):** set `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and optionally `VAPID_SUBJECT` in Vercel. Run `supabase/sql/021_phase12_push.sql` on Supabase if not using `prisma db push`.
+
 ---
 
 ## Development workflow

@@ -10,6 +10,7 @@ export type ActiveAnnouncement = {
   title: string;
   body: string;
   dismissible: boolean;
+  targetUrl: string | null;
 };
 
 export const getActiveAnnouncementsForUser = cache(
@@ -45,6 +46,7 @@ export const getActiveAnnouncementsForUser = cache(
           dismissible: true,
           target: true,
           targetUserId: true,
+          targetUrl: true,
         },
       });
 
@@ -58,6 +60,7 @@ export const getActiveAnnouncementsForUser = cache(
           title: row.title,
           body: row.body,
           dismissible: row.dismissible,
+          targetUrl: row.targetUrl,
         }));
     } catch {
       // Migration 020 may not be applied yet — do not break the homepage.

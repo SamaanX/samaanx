@@ -641,18 +641,30 @@ model Notification {
 }
 
 model PushSubscription {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  userAgent String?  @map("user_agent")
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(6)
 
   user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+model PushSendLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  dedupeKey String   @unique @map("dedupe_key")
+  sentAt    DateTime @default(now()) @map("sent_at") @db.Timestamptz(6)
+
+  @@index([userId, sentAt(sort: Desc)])
+  @@map("push_send_logs")
 }
 
 model ScheduledJob {
@@ -800,6 +812,7 @@ model Announcement {
   id           String             @id @default(uuid()) @db.Uuid
   title        String
   body         String
+  targetUrl    String?            @map("target_url")
   target       AnnouncementTarget @default(ALL)
   targetUserId String?            @map("target_user_id") @db.Uuid
   dismissible  Boolean            @default(true)
@@ -809,6 +822,13 @@ model Announcement {
   createdById  String             @map("created_by") @db.Uuid
   createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  deliveryRecipientCount Int?      @map("delivery_recipient_count")
+  deliveryPushAttempted  Int?      @map("delivery_push_attempted")
+  deliveryPushSuccess    Int?      @map("delivery_push_success")
+  deliveryPushFailed     Int?      @map("delivery_push_failed")
+  deliveryExpiredRemoved Int?      @map("delivery_expired_removed")
+  deliveryCompletedAt    DateTime? @map("delivery_completed_at") @db.Timestamptz(6)
 
   createdBy  Profile                 @relation("AnnouncementCreator", fields: [createdById], references: [id], onDelete: Restrict)
   targetUser Profile?                @relation("AnnouncementTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)

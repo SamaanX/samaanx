@@ -1,5 +1,7 @@
 "use server";
 
+import { scheduleChannelDelivery } from "@/features/notifications/services/dispatch";
+import { buildInAppNotificationData } from "@/features/rentals/services/notifications";
 import {
   getPublicProfileById,
   getReviewEligibilityForRental,
@@ -83,6 +85,7 @@ export async function submitReviewAction(
         status: true,
         buyerId: true,
         sellerId: true,
+        listingId: true,
         listing: { select: { title: true } },
       },
     });
@@ -142,8 +145,43 @@ export async function submitReviewAction(
       });
 
       await recomputeProfileRating(revieweeId, tx);
+
+      await tx.notification.create({
+        data: buildInAppNotificationData({
+          userId: revieweeId,
+          type: "SYSTEM",
+          title: "New review received",
+          body: `${profile.displayName} left you a ${parsed.data.rating}-star review for “${rental.listing.title}”.`,
+          rentalId: rental.id,
+          listingId: rental.listingId,
+          payload: {
+            kind: "review_received",
+            reviewId: created.id,
+            rentalId: rental.id,
+            rating: parsed.data.rating,
+          },
+        }),
+      });
+
       return created;
     });
+
+    scheduleChannelDelivery([
+      {
+        userId: revieweeId,
+        type: "SYSTEM",
+        title: "New review received",
+        body: `${profile.displayName} left you a ${parsed.data.rating}-star review for “${rental.listing.title}”.`,
+        rentalId: rental.id,
+        listingId: rental.listingId,
+        payload: {
+          kind: "review_received",
+          reviewId: review.id,
+          rentalId: rental.id,
+        },
+        dedupeSeed: review.id,
+      },
+    ]);
 
     scheduleLiveSyncAfterResponse([profile.id, revieweeId]);
 

@@ -41,8 +41,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# PWA generated
-public/sw.js
+# PWA generated (sw.js is committed — hand-maintained for push)
 public/sw.js.map
 public/workbox-*.js
 public/workbox-*.js.map

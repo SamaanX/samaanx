@@ -46,12 +46,23 @@ export const adminSettingsSchema = z.object({
 const adminAnnouncementBaseSchema = z.object({
   title: z.string().trim().min(2).max(120),
   body: z.string().trim().min(2).max(2000),
+  targetUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .nullable()
+    .optional()
+    .refine(
+      (value) => !value || value.startsWith("/"),
+      "Target URL must start with /.",
+    ),
   target: z.enum(["ALL", "BUYERS", "SELLERS", "ADMINS", "USER"]),
   targetUserId: z.string().uuid().nullable().optional(),
   dismissible: z.boolean(),
   isActive: z.boolean(),
   startsAt: z.string().datetime().optional(),
   endsAt: z.string().datetime().nullable().optional(),
+  confirmAllUsers: z.boolean().optional(),
 });
 
 function requireUserTarget<
@@ -66,15 +77,36 @@ function requireUserTarget<
   }
 }
 
-export const adminAnnouncementSchema =
-  adminAnnouncementBaseSchema.superRefine(requireUserTarget);
+function requireAllUsersConfirmation<
+  T extends { target: string; confirmAllUsers?: boolean },
+>(data: T, ctx: z.RefinementCtx) {
+  if (data.target === "ALL" && data.confirmAllUsers !== true) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Confirm broadcast to all users before sending.",
+      path: ["confirmAllUsers"],
+    });
+  }
+}
+
+export const adminAnnouncementSchema = adminAnnouncementBaseSchema.superRefine(
+  (data, ctx) => {
+    requireUserTarget(data, ctx);
+    requireAllUsersConfirmation(data, ctx);
+  },
+);
 
 export const adminAnnouncementUpdateSchema = adminAnnouncementBaseSchema
   .extend({
     id: z.string().uuid(),
     notifyUsers: z.boolean().default(true),
   })
-  .superRefine(requireUserTarget);
+  .superRefine((data, ctx) => {
+    requireUserTarget(data, ctx);
+    if (data.notifyUsers) {
+      requireAllUsersConfirmation(data, ctx);
+    }
+  });
 
 export const adminSearchSchema = z.object({
   q: z.string().trim().min(2).max(100),

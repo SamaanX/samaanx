@@ -6,81 +6,65 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import {
   dismissPushPromptAction,
-  getNotificationPreferencesAction,
   updateNotificationPreferencesAction,
 } from "@/features/notifications/actions/notification-preferences";
 import { savePushSubscriptionAction } from "@/features/notifications/actions/push-subscription";
-import { getVapidPublicKey } from "@/lib/push/public";
+import {
+  getPushCapability,
+  subscribeToPushNotifications,
+} from "@/features/notifications/lib/subscribe-push";
 import { cn } from "@/lib/utils";
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64);
-  const output = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i += 1) {
-    output[i] = raw.charCodeAt(i);
-  }
-  return output;
-}
 
 export function PushEnableBanner({ className }: { className?: string }) {
   const [visible, setVisible] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const vapidKey = getVapidPublicKey();
 
   React.useEffect(() => {
+    const capability = getPushCapability();
+    if (
+      !capability.supported ||
+      !capability.vapidConfigured ||
+      capability.permission === "granted" ||
+      capability.permission === "denied"
+    ) {
+      return;
+    }
+
     let cancelled = false;
     void (async () => {
-      if (
-        typeof window === "undefined" ||
-        !("Notification" in window) ||
-        !("serviceWorker" in navigator) ||
-        !vapidKey
-      ) {
-        return;
-      }
-      if (Notification.permission === "granted") return;
+      const { getNotificationPreferencesAction } =
+        await import("@/features/notifications/actions/notification-preferences");
       const prefs = await getNotificationPreferencesAction();
-      if (cancelled || !prefs) return;
-      if (prefs.pushPromptDismissedAt) return;
-      if (Notification.permission === "denied") return;
+      if (cancelled || !prefs || prefs.pushPromptDismissedAt) return;
       setVisible(true);
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [vapidKey]);
+  }, []);
 
-  if (!visible || !vapidKey) return null;
+  if (!visible) return null;
 
   async function enablePush() {
     setLoading(true);
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
-        if (permission === "denied") {
+      const result = await subscribeToPushNotifications();
+      if (!result.ok) {
+        if (result.reason === "denied") {
           await dismissPushPromptAction();
           setVisible(false);
         }
         return;
       }
 
-      const registration = await navigator.serviceWorker.register("/sw.js");
-      await navigator.serviceWorker.ready;
-      if (!vapidKey) return;
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
+      const saved = await savePushSubscriptionAction({
+        endpoint: result.endpoint,
+        keys: result.keys,
+        userAgent: navigator.userAgent.slice(0, 512),
       });
+      if (!saved.ok) return;
 
-      const json = subscription.toJSON();
-      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
-
-      await savePushSubscriptionAction({
-        endpoint: json.endpoint,
-        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-      });
       await updateNotificationPreferencesAction({ notifyPushEnabled: true });
       setVisible(false);
     } finally {

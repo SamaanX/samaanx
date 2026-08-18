@@ -109,8 +109,42 @@ export function resolveNotificationHref(
     case "ACCOUNT_CHANGE":
       return "/profile#notifications";
     case "SYSTEM":
-    default:
+    default: {
+      const kind =
+        options?.payload &&
+        typeof options.payload === "object" &&
+        typeof (options.payload as { kind?: unknown }).kind === "string"
+          ? (options.payload as { kind: string }).kind
+          : null;
+      if (kind === "review_received") {
+        const rentalId = options?.rentalId ?? null;
+        return rentalId ? `/rentals/${rentalId}` : "/profile";
+      }
+      if (kind === "announcement") {
+        const targetUrl =
+          options?.payload &&
+          typeof options.payload === "object" &&
+          typeof (options.payload as { targetUrl?: unknown }).targetUrl ===
+            "string"
+            ? (options.payload as { targetUrl: string }).targetUrl
+            : null;
+        if (targetUrl?.startsWith("/")) {
+          return targetUrl;
+        }
+        const announcementId =
+          options?.payload &&
+          typeof options.payload === "object" &&
+          typeof (options.payload as { announcementId?: unknown })
+            .announcementId === "string"
+            ? (options.payload as { announcementId: string }).announcementId
+            : null;
+        return announcementId ? `/notifications` : "/notifications";
+      }
+      if (kind === "welcome") {
+        return "/";
+      }
       return "/notifications";
+    }
   }
 }
 

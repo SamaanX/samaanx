@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { adminReportActionSchema } from "@/features/admin/schemas/admin-schemas";
 import { writeAdminActionLog } from "@/features/admin/services/audit-log";
 import type { AdminActionResult } from "@/features/admin/types/admin";
+import { scheduleChannelDelivery } from "@/features/notifications/services/dispatch";
 import { requireAdmin } from "@/lib/auth/guards";
 import { prisma } from "@/lib/db/prisma";
 
@@ -111,6 +112,16 @@ export async function warnReportUserAction(
         deliveredAt: new Date(),
       },
     });
+
+    scheduleChannelDelivery([
+      {
+        userId: report.targetId,
+        type: "SECURITY_ALERT",
+        title: "Community guidelines warning",
+        body: parsed.data.resolutionNotes ?? parsed.data.reason,
+        dedupeSeed: parsed.data.reportId,
+      },
+    ]);
 
     await updateReportStatusAction({
       reportId: parsed.data.reportId,

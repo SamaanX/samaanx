@@ -8,7 +8,12 @@ import {
   verifyPinHash,
   verifyQrPayload,
 } from "@/domain/verification";
-import { scheduleVerificationReadyDelivery } from "@/features/notifications/services/dispatch";
+import {
+  type ChannelDeliveryEvent,
+  notifyParamsToDeliveryEvent,
+  scheduleChannelDelivery,
+  scheduleVerificationReadyDelivery,
+} from "@/features/notifications/services/dispatch";
 import type { LiveSyncVerificationPatch } from "@/features/realtime/verification-sync";
 import { buildInAppNotificationData } from "@/features/rentals/services/notifications";
 import { getVerificationStatusView } from "@/features/verification/queries/status";
@@ -252,6 +257,36 @@ export async function requestReturnAction(
       });
     });
     wakeRentalParties(rental.buyerId, rental.sellerId, rental.id);
+    scheduleChannelDelivery([
+      notifyParamsToDeliveryEvent({
+        userId: rental.sellerId,
+        type: "VERIFICATION_READY",
+        title: "Item Return Requested",
+        body: `The renter is ready to return “${rental.listing.title}”. Review and confirm when you receive it.`,
+        rentalId: rental.id,
+        listingId: rental.listingId,
+        payload: {
+          rentalId: rental.id,
+          stage: "RETURN",
+          listingSlug: rental.listing.slug,
+        },
+        dedupeSeed: `${rental.id}:return-requested:seller`,
+      }),
+      notifyParamsToDeliveryEvent({
+        userId: rental.buyerId,
+        type: "VERIFICATION_READY",
+        title: "Return request submitted",
+        body: `Waiting for the owner to confirm return of “${rental.listing.title}”. Complete QR/PIN at meetup.`,
+        rentalId: rental.id,
+        listingId: rental.listingId,
+        payload: {
+          rentalId: rental.id,
+          stage: "RETURN",
+          listingSlug: rental.listing.slug,
+        },
+        dedupeSeed: `${rental.id}:return-requested:buyer`,
+      }),
+    ]);
     return {
       ok: true,
       data: { rentalId: rental.id, peerUserId: rental.sellerId },
@@ -727,6 +762,7 @@ export async function confirmStageAction(input: unknown): Promise<
     const isBuyer = rental.buyerId === profile.id;
 
     const result = await prisma.$transaction(async (tx) => {
+      const deliveryEvents: ChannelDeliveryEvent[] = [];
       const verification = await tx.rentalVerification.findFirst({
         where: { rentalId, stage, isCurrent: true },
       });
@@ -751,6 +787,7 @@ export async function confirmStageAction(input: unknown): Promise<
           nextStatus: rental.status,
           buyerConfirmed: true,
           sellerConfirmed: confirmation.sellerConfirmed,
+          deliveryEvents,
         };
       }
       if (!isBuyer && confirmation.sellerConfirmed) {
@@ -761,6 +798,7 @@ export async function confirmStageAction(input: unknown): Promise<
           nextStatus: rental.status,
           buyerConfirmed: confirmation.buyerConfirmed,
           sellerConfirmed: true,
+          deliveryEvents,
         };
       }
 
@@ -790,16 +828,18 @@ export async function confirmStageAction(input: unknown): Promise<
           (!isBuyer && !confirmation.sellerConfirmed))
       ) {
         const otherUserId = isBuyer ? rental.sellerId : rental.buyerId;
+        const returnTitle = isBuyer
+          ? "Return waiting for your confirmation"
+          : "Seller confirmed return";
+        const returnBody = isBuyer
+          ? `The renter confirmed return of “${rental.listing.title}”. Confirm when you have received the item.`
+          : `The owner confirmed receiving “${rental.listing.title}”. Confirm on your side to finish.`;
         await tx.notification.create({
           data: buildInAppNotificationData({
             userId: otherUserId,
             type: "VERIFICATION_READY",
-            title: isBuyer
-              ? "Return waiting for your confirmation"
-              : "Seller confirmed return",
-            body: isBuyer
-              ? `The renter confirmed return of “${rental.listing.title}”. Confirm when you have received the item.`
-              : `The owner confirmed receiving “${rental.listing.title}”. Confirm on your side to finish.`,
+            title: returnTitle,
+            body: returnBody,
             rentalId,
             listingId: rental.listingId,
             payload: {
@@ -809,6 +849,22 @@ export async function confirmStageAction(input: unknown): Promise<
             },
           }),
         });
+        deliveryEvents.push(
+          notifyParamsToDeliveryEvent({
+            userId: otherUserId,
+            type: "VERIFICATION_READY",
+            title: returnTitle,
+            body: returnBody,
+            rentalId,
+            listingId: rental.listingId,
+            payload: {
+              rentalId,
+              stage: "RETURN",
+              listingSlug: rental.listing.slug,
+            },
+            dedupeSeed: `${rentalId}:return-partial:${isBuyer ? "buyer" : "seller"}`,
+          }),
+        );
       }
 
       if (bothConfirmed && !fresh.completedAt) {
@@ -849,6 +905,26 @@ export async function confirmStageAction(input: unknown): Promise<
               }),
             ],
           });
+          deliveryEvents.push(
+            notifyParamsToDeliveryEvent({
+              userId: rental.buyerId,
+              type: "HANDOVER_COMPLETED",
+              title: "Handover complete",
+              body: `“${rental.listing.title}” is now active. Enjoy your rental.`,
+              rentalId,
+              listingId: rental.listingId,
+              dedupeSeed: `${rentalId}:handover:buyer`,
+            }),
+            notifyParamsToDeliveryEvent({
+              userId: rental.sellerId,
+              type: "HANDOVER_COMPLETED",
+              title: "Handover complete",
+              body: `Handover for “${rental.listing.title}” is confirmed. Rental is active.`,
+              rentalId,
+              listingId: rental.listingId,
+              dedupeSeed: `${rentalId}:handover:seller`,
+            }),
+          );
         } else {
           await tx.rental.update({
             where: { id: rentalId },
@@ -918,6 +994,44 @@ export async function confirmStageAction(input: unknown): Promise<
               }),
             ],
           });
+          deliveryEvents.push(
+            notifyParamsToDeliveryEvent({
+              userId: rental.buyerId,
+              type: "RETURN_COMPLETED",
+              title: "Rental completed",
+              body: `Return of “${rental.listing.title}” is complete. Thank you!`,
+              rentalId,
+              listingId: rental.listingId,
+              dedupeSeed: `${rentalId}:return-complete:buyer`,
+            }),
+            notifyParamsToDeliveryEvent({
+              userId: rental.sellerId,
+              type: "RETURN_COMPLETED",
+              title: "Rental completed",
+              body: `Return of “${rental.listing.title}” is complete. Your item is back.`,
+              rentalId,
+              listingId: rental.listingId,
+              dedupeSeed: `${rentalId}:return-complete:seller`,
+            }),
+            notifyParamsToDeliveryEvent({
+              userId: rental.buyerId,
+              type: "REVIEW_REMINDER",
+              title: "Leave a review",
+              body: `How was renting “${rental.listing.title}”? Leave a quick review.`,
+              rentalId,
+              listingId: rental.listingId,
+              dedupeSeed: `${rentalId}:review-reminder:buyer`,
+            }),
+            notifyParamsToDeliveryEvent({
+              userId: rental.sellerId,
+              type: "REVIEW_REMINDER",
+              title: "Leave a review",
+              body: `How was renting with this buyer for “${rental.listing.title}”?`,
+              rentalId,
+              listingId: rental.listingId,
+              dedupeSeed: `${rentalId}:review-reminder:seller`,
+            }),
+          );
         }
       }
 
@@ -926,8 +1040,12 @@ export async function confirmStageAction(input: unknown): Promise<
         nextStatus,
         buyerConfirmed: fresh.buyerConfirmed,
         sellerConfirmed: fresh.sellerConfirmed,
+        deliveryEvents,
       };
     });
+    if (result.deliveryEvents.length > 0) {
+      scheduleChannelDelivery(result.deliveryEvents);
+    }
     wakeRentalParties(rental.buyerId, rental.sellerId, rentalId, {
       stage,
       buyerConfirmed: result.buyerConfirmed,
