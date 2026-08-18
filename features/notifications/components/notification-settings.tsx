@@ -114,6 +114,29 @@ export function NotificationSettings() {
     });
   }, []);
 
+  /** Re-save browser subscription if permission granted but DB row missing. */
+  React.useEffect(() => {
+    if (loading || !pushSupported || pushPermission !== "granted") return;
+
+    void (async () => {
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js");
+        await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        const json = subscription?.toJSON();
+        if (!json?.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+
+        await savePushSubscriptionAction({
+          endpoint: json.endpoint,
+          keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+          userAgent: navigator.userAgent.slice(0, 512),
+        });
+      } catch {
+        /* graceful — user can use toggle */
+      }
+    })();
+  }, [loading, pushSupported, pushPermission]);
+
   async function update(
     patch: Partial<NotificationPreferencesView>,
   ): Promise<void> {
@@ -218,10 +241,32 @@ export function NotificationSettings() {
     setError(null);
     setMessage(null);
     setTestingPush(true);
+
+    if (Notification.permission === "granted" && pushSupported) {
+      try {
+        const registration = await navigator.serviceWorker.register("/sw.js");
+        await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        const json = subscription?.toJSON();
+        if (json?.endpoint && json.keys?.p256dh && json.keys?.auth) {
+          await savePushSubscriptionAction({
+            endpoint: json.endpoint,
+            keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+            userAgent: navigator.userAgent.slice(0, 512),
+          });
+        }
+      } catch {
+        /* continue to test action */
+      }
+    }
+
     const result = await sendTestPushAction();
     setTestingPush(false);
     if (!result.ok) {
-      setError(result.error ?? "Test push failed.");
+      setError(
+        result.error ??
+          "Test push failed. Turn Browser push OFF, then ON again, allow permission, and retry.",
+      );
       return;
     }
     setMessage("Test push sent — check your device notification tray.");

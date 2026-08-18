@@ -128,7 +128,7 @@ export async function sendTestPushAction(): Promise<{
       return {
         ok: false,
         error:
-          "No push subscription on this account. Enable browser push first.",
+          "No push subscription saved yet. Open Profile → Notification settings, turn Browser push OFF then ON, tap Allow when the browser asks, wait for “Browser push enabled”, then try again.",
       };
     }
 
