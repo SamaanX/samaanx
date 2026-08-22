@@ -7,6 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import * as React from "react";
+import { toast } from "sonner";
 
 import {
   deleteChatMessageForEveryoneAction,
@@ -39,6 +40,7 @@ import type {
   ChatConversationListItem,
   ChatMessagesPage,
   ChatMessageView,
+  ChatReplyPreview,
   ChatThreadHeader,
 } from "@/features/chat/types/chat";
 import { queryKeys } from "@/lib/query-keys";
@@ -664,7 +666,11 @@ export function useChatThread(params: {
     ]);
   }
 
-  async function sendText(body: string, replyToId?: string | null) {
+  async function sendText(
+    body: string,
+    replyToId?: string | null,
+    replyPreview?: ChatReplyPreview | null,
+  ) {
     if (!conversationId)
       return { ok: false as const, error: "No conversation" };
     const clientId = `tmp-${crypto.randomUUID()}`;
@@ -676,10 +682,10 @@ export function useChatThread(params: {
       createdAt: new Date().toISOString(),
       deliveredAt: null,
       readAt: null,
-      status: "sending",
+      status: "sent",
       isMine: true,
       attachment: null,
-      replyTo: null,
+      replyTo: replyPreview ?? null,
       optimistic: true,
     };
 
@@ -688,61 +694,67 @@ export function useChatThread(params: {
       clearUnread: true,
     });
 
+    void fanoutMessage(optimistic);
+
     const clickAt = Date.now();
     if (typeof performance !== "undefined") {
       performance.mark("chat-send-click");
     }
 
-    const result = await sendChatTextMessageAction({
-      conversationId,
-      body,
-      replyToId,
-      clientId,
-    });
-
-    if (!result.ok) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.chat.messages(conversationId),
+    void (async () => {
+      const result = await sendChatTextMessageAction({
+        conversationId,
+        body,
+        replyToId,
+        clientId,
       });
-      return result;
-    }
 
-    const confirmed: ChatMessageView = {
-      ...result.data,
-      status: "sent",
-      optimistic: false,
-    };
-    patchReplaceOptimistic(queryClient, conversationId, clientId, confirmed);
-    patchInboxPreview(queryClient, conversationId, confirmed, {
-      clearUnread: true,
-    });
+      if (!result.ok) {
+        patchRemoveMessage(queryClient, conversationId, clientId);
+        toast.error(result.error.message ?? "Message failed to send.");
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.chat.messages(conversationId),
+        });
+        return;
+      }
 
-    if (typeof performance !== "undefined") {
-      performance.mark("chat-send-response");
-      performance.measure(
-        "chat-send-action-ms",
-        "chat-send-click",
-        "chat-send-response",
-      );
-    }
+      const confirmed: ChatMessageView = {
+        ...result.data,
+        status: "sent",
+        optimistic: false,
+      };
+      patchReplaceOptimistic(queryClient, conversationId, clientId, confirmed);
+      patchInboxPreview(queryClient, conversationId, confirmed, {
+        clearUnread: true,
+      });
 
-    if (
-      process.env.NODE_ENV === "development" ||
-      process.env.NEXT_PUBLIC_PERF_CHAT === "1"
-    ) {
-      console.warn(
-        JSON.stringify({
-          level: "debug",
-          message: "chat.send.client",
-          actionMs: Date.now() - clickAt,
-          at: new Date().toISOString(),
-        }),
-      );
-    }
+      if (typeof performance !== "undefined") {
+        performance.mark("chat-send-response");
+        performance.measure(
+          "chat-send-action-ms",
+          "chat-send-click",
+          "chat-send-response",
+        );
+      }
 
-    void fanoutMessage(confirmed);
+      if (
+        process.env.NODE_ENV === "development" ||
+        process.env.NEXT_PUBLIC_PERF_CHAT === "1"
+      ) {
+        console.warn(
+          JSON.stringify({
+            level: "debug",
+            message: "chat.send.client",
+            actionMs: Date.now() - clickAt,
+            at: new Date().toISOString(),
+          }),
+        );
+      }
 
-    return { ok: true as const, data: confirmed };
+      void fanoutMessage(confirmed);
+    })();
+
+    return { ok: true as const, data: optimistic };
   }
 
   async function sendAttachment(

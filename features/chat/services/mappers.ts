@@ -36,6 +36,67 @@ export function messageStatus(params: {
   return "sent";
 }
 
+export function buildSentChatMessageView(params: {
+  row: Pick<
+    Message,
+    | "id"
+    | "conversationId"
+    | "senderId"
+    | "body"
+    | "createdAt"
+    | "deliveredAt"
+    | "readAt"
+    | "attachmentKind"
+    | "attachmentPath"
+    | "attachmentUrl"
+    | "attachmentName"
+    | "attachmentMime"
+    | "attachmentSize"
+  > & { deletedForEveryoneAt?: Date | null };
+  viewerId: string;
+  replyTo?: ChatReplyPreview | null;
+}): ChatMessageView {
+  const isMine = params.row.senderId === params.viewerId;
+  const deletedForEveryone = Boolean(params.row.deletedForEveryoneAt);
+
+  const attachment =
+    !deletedForEveryone &&
+    params.row.attachmentKind &&
+    params.row.attachmentPath &&
+    params.row.attachmentUrl &&
+    params.row.attachmentName &&
+    params.row.attachmentMime &&
+    params.row.attachmentSize != null
+      ? {
+          kind: params.row.attachmentKind,
+          path: params.row.attachmentPath,
+          url: params.row.attachmentUrl,
+          name: params.row.attachmentName,
+          mime: params.row.attachmentMime,
+          size: params.row.attachmentSize,
+        }
+      : null;
+
+  return {
+    id: params.row.id,
+    conversationId: params.row.conversationId,
+    senderId: params.row.senderId,
+    body: deletedForEveryone ? "" : params.row.body,
+    createdAt: params.row.createdAt.toISOString(),
+    deliveredAt: params.row.deliveredAt?.toISOString() ?? null,
+    readAt: params.row.readAt?.toISOString() ?? null,
+    status: messageStatus({
+      isMine,
+      deliveredAt: params.row.deliveredAt,
+      readAt: params.row.readAt,
+    }),
+    isMine,
+    attachment,
+    replyTo: params.replyTo && !deletedForEveryone ? params.replyTo : null,
+    deletedForEveryone,
+  };
+}
+
 export function toChatMessageView(
   row: MessageRow,
   viewerId: string,

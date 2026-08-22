@@ -289,11 +289,21 @@ export function ChatThread({
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
         onTyping={notifyTyping}
-        onSendText={async (body) => {
+        onSendText={(body) => {
           if (messages.length === 0) {
             trackEvent("chat_started", { conversation_id: conversationId });
           }
-          await sendText(body, replyTo?.id);
+          const replyPreview = replyTo
+            ? {
+                id: replyTo.id,
+                body: replyTo.body,
+                senderName: replyTo.isMine
+                  ? myName
+                  : liveHeader.peer.displayName,
+                hasAttachment: Boolean(replyTo.attachment),
+              }
+            : null;
+          void sendText(body, replyTo?.id, replyPreview);
           setReplyTo(null);
         }}
         onSendFile={async (file, body) => {

@@ -25,7 +25,7 @@ type ChatComposerProps = {
   replyTo: ChatMessageView | null;
   onClearReply: () => void;
   onTyping: () => void;
-  onSendText: (body: string) => Promise<void>;
+  onSendText: (body: string) => void;
   onSendFile: (file: File, body?: string) => Promise<void>;
 };
 
@@ -50,7 +50,7 @@ export function ChatComposer({
     if (!body || disabled || uploading) return;
     setText("");
     setEmojiOpen(false);
-    await onSendText(body);
+    void onSendText(body);
   }
 
   async function handleFiles(files: FileList | null) {

@@ -27,14 +27,15 @@ import {
 } from "@/features/chat/services/chat-realtime-server";
 import { uploadChatAttachment } from "@/features/chat/services/chat-storage";
 import {
+  buildSentChatMessageView,
   previewFromMessage,
-  toChatMessageView,
 } from "@/features/chat/services/mappers";
 import type {
   ChatActionResult,
   ChatConversationListItem,
   ChatMessagesPage,
   ChatMessageView,
+  ChatReplyPreview,
   ChatThreadHeader,
 } from "@/features/chat/types/chat";
 import {
@@ -59,12 +60,6 @@ async function assertParticipant(conversationId: string, userId: string) {
       sellerId: true,
       isReadonly: true,
       rentalId: true,
-      rental: {
-        select: {
-          listingId: true,
-          listing: { select: { title: true } },
-        },
-      },
     },
   });
   if (!conversation) {
@@ -83,13 +78,25 @@ function scheduleChatMessageNotification(params: {
   attachmentKind: MessageAttachmentKind | null;
   attachmentName: string | null;
   rentalId: string;
-  listingId: string;
-  listingTitle: string;
   conversationId: string;
   messageId: string;
 }) {
   after(async () => {
     try {
+      const meta = await prisma.conversation.findFirst({
+        where: { id: params.conversationId },
+        select: {
+          rental: {
+            select: {
+              listingId: true,
+              listing: { select: { title: true } },
+            },
+          },
+        },
+      });
+      const listingId = meta?.rental.listingId ?? "";
+      const listingTitle = meta?.rental.listing.title ?? "Listing";
+
       await prisma.notification.create({
         data: buildInAppNotificationData({
           userId: params.peerId,
@@ -101,11 +108,11 @@ function scheduleChatMessageNotification(params: {
             attachmentName: params.attachmentName,
           })}`,
           rentalId: params.rentalId,
-          listingId: params.listingId,
+          listingId,
           payload: {
             conversationId: params.conversationId,
             messageId: params.messageId,
-            listingTitle: params.listingTitle,
+            listingTitle,
           },
         }),
       });
@@ -121,7 +128,7 @@ function scheduleChatMessageNotification(params: {
             attachmentName: params.attachmentName,
           })}`,
           rentalId: params.rentalId,
-          listingId: params.listingId,
+          listingId,
           payload: { conversationId: params.conversationId },
           dedupeSeed: params.messageId,
         }),
@@ -257,13 +264,20 @@ export async function sendChatTextMessageAction(
     );
     if (conversation.isReadonly) throw chatReadonlyError();
 
+    let replyPreview: ChatReplyPreview | null = null;
     if (parsed.data.replyToId) {
       const reply = await prisma.message.findFirst({
         where: {
           id: parsed.data.replyToId,
           conversationId: conversation.id,
         },
-        select: { id: true },
+        select: {
+          id: true,
+          body: true,
+          attachmentKind: true,
+          attachmentName: true,
+          sender: { select: { displayName: true } },
+        },
       });
       if (!reply) {
         return {
@@ -271,6 +285,12 @@ export async function sendChatTextMessageAction(
           error: { code: "VALIDATION", message: "Reply target not found." },
         };
       }
+      replyPreview = {
+        id: reply.id,
+        body: reply.body,
+        senderName: reply.sender.displayName,
+        hasAttachment: Boolean(reply.attachmentKind),
+      };
     }
 
     const actionStarted = Date.now();
@@ -283,19 +303,21 @@ export async function sendChatTextMessageAction(
           body: parsed.data.body,
           replyToId: parsed.data.replyToId ?? null,
         },
-        include: {
-          sender: {
-            select: { id: true, displayName: true, avatarUrl: true },
-          },
-          replyTo: {
-            select: {
-              id: true,
-              body: true,
-              attachmentKind: true,
-              attachmentName: true,
-              sender: { select: { displayName: true } },
-            },
-          },
+        select: {
+          id: true,
+          conversationId: true,
+          senderId: true,
+          body: true,
+          createdAt: true,
+          deliveredAt: true,
+          readAt: true,
+          attachmentKind: true,
+          attachmentPath: true,
+          attachmentUrl: true,
+          attachmentName: true,
+          attachmentMime: true,
+          attachmentSize: true,
+          deletedForEveryoneAt: true,
         },
       });
 
@@ -321,13 +343,15 @@ export async function sendChatTextMessageAction(
       attachmentKind: null,
       attachmentName: null,
       rentalId: conversation.rentalId,
-      listingId: conversation.rental.listingId,
-      listingTitle: conversation.rental.listing.title,
       conversationId: conversation.id,
       messageId: created.message.id,
     });
 
-    const view = toChatMessageView(created.message, profile.id);
+    const view = buildSentChatMessageView({
+      row: created.message,
+      viewerId: profile.id,
+      replyTo: replyPreview,
+    });
 
     scheduleChatMessageBroadcast({
       peerId: created.peerId,
@@ -403,19 +427,21 @@ export async function sendChatAttachmentAction(
           attachmentMime: uploaded.mime,
           attachmentSize: uploaded.size,
         },
-        include: {
-          sender: {
-            select: { id: true, displayName: true, avatarUrl: true },
-          },
-          replyTo: {
-            select: {
-              id: true,
-              body: true,
-              attachmentKind: true,
-              attachmentName: true,
-              sender: { select: { displayName: true } },
-            },
-          },
+        select: {
+          id: true,
+          conversationId: true,
+          senderId: true,
+          body: true,
+          createdAt: true,
+          deliveredAt: true,
+          readAt: true,
+          attachmentKind: true,
+          attachmentPath: true,
+          attachmentUrl: true,
+          attachmentName: true,
+          attachmentMime: true,
+          attachmentSize: true,
+          deletedForEveryoneAt: true,
         },
       });
 
@@ -439,13 +465,14 @@ export async function sendChatAttachmentAction(
       attachmentKind: created.message.attachmentKind,
       attachmentName: created.message.attachmentName,
       rentalId: conversation.rentalId,
-      listingId: conversation.rental.listingId,
-      listingTitle: conversation.rental.listing.title,
       conversationId,
       messageId: created.message.id,
     });
 
-    const view = toChatMessageView(created.message, profile.id);
+    const view = buildSentChatMessageView({
+      row: created.message,
+      viewerId: profile.id,
+    });
 
     scheduleChatMessageBroadcast({
       peerId: created.peerId,
