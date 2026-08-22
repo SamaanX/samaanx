@@ -1,22 +1,8 @@
-/* SamaanX service worker — offline shell + Web Push (Phase 12).
- * Does NOT cache API, chat, rental, notification, or auth responses. */
+/* SamaanX service worker — Web Push + minimal offline shell for "/".
+ * Does NOT intercept dynamic app routes (listings, chat, rentals, etc.). */
 
-const CACHE_NAME = "samaanx-shell-v1";
-const SHELL_URLS = ["/", "/manifest.webmanifest"];
-
-const NEVER_CACHE_PREFIXES = [
-  "/api/",
-  "/chat",
-  "/rentals",
-  "/notifications",
-  "/seller/",
-  "/admin/",
-  "/auth/",
-];
-
-function shouldNeverCache(pathname) {
-  return NEVER_CACHE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
+const CACHE_NAME = "samaanx-shell-v2";
+const SHELL_URLS = ["/", "/offline", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -45,8 +31,11 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (shouldNeverCache(url.pathname)) return;
-  if (url.pathname.includes(".")) return;
+
+  // Only cache the home page shell — never intercept listings, chat, rentals, etc.
+  const isHomeNavigation =
+    request.mode === "navigate" && url.pathname === "/";
+  if (!isHomeNavigation) return;
 
   event.respondWith(
     fetch(request)
@@ -58,13 +47,16 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(async () => {
-        const cached = await caches.match(request);
+        const cached = await caches.match("/");
         if (cached) return cached;
-        if (request.mode === "navigate") {
-          const fallback = await caches.match("/");
-          if (fallback) return fallback;
-        }
-        return Response.error();
+        return caches.match("/offline").then(
+          (offline) =>
+            offline ??
+            new Response("Offline", {
+              status: 503,
+              headers: { "Content-Type": "text/plain; charset=utf-8" },
+            }),
+        );
       }),
   );
 });
