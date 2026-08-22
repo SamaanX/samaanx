@@ -81,6 +81,25 @@ async function fetchListingDetailRaw(slug: string) {
   });
 }
 
+function rehydrateListingDetailRaw(
+  raw: Awaited<ReturnType<typeof fetchListingDetailRaw>>,
+): ListingDetailRaw | null {
+  if (!raw) return null;
+  return {
+    ...raw,
+    publishedAt: raw.publishedAt ? new Date(raw.publishedAt) : null,
+    availability: raw.availability.map((row) => ({
+      ...row,
+      startDate: new Date(row.startDate),
+      endDate: new Date(row.endDate),
+    })),
+    seller: {
+      ...raw.seller,
+      memberSince: new Date(raw.seller.memberSince),
+    },
+  };
+}
+
 const getCachedListingDetailRawBySlug = unstable_cache(
   async (slug: string) => {
     return withPerf("listing.detail", () => fetchListingDetailRaw(slug));
@@ -94,7 +113,8 @@ const getCachedListingDetailRawBySlug = unstable_cache(
 
 /** Per-request dedupe on top of cross-request cache. */
 const getListingDetailRawBySlug = cache(async (slug: string) => {
-  return getCachedListingDetailRawBySlug(slug);
+  const raw = await getCachedListingDetailRawBySlug(slug);
+  return rehydrateListingDetailRaw(raw);
 });
 
 export function mapRawListingToPublicView(

@@ -1,64 +1,17 @@
-/* SamaanX service worker — Web Push + minimal offline shell for "/".
- * Does NOT intercept dynamic app routes (listings, chat, rentals, etc.). */
-
-const CACHE_NAME = "samaanx-shell-v2";
-const SHELL_URLS = ["/", "/offline", "/manifest.webmanifest"];
+/* SamaanX service worker — Web Push only (no fetch interception). */
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(SHELL_URLS))
-      .catch(() => undefined),
+    caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))),
   );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)),
-      ),
-    ),
+    caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))),
   );
   self.clients.claim();
-});
-
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  if (request.method !== "GET") return;
-
-  const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
-
-  // Only cache the home page shell — never intercept listings, chat, rentals, etc.
-  const isHomeNavigation =
-    request.mode === "navigate" && url.pathname === "/";
-  if (!isHomeNavigation) return;
-
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok && response.type === "basic") {
-          const clone = response.clone();
-          void caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(async () => {
-        const cached = await caches.match("/");
-        if (cached) return cached;
-        return caches.match("/offline").then(
-          (offline) =>
-            offline ??
-            new Response("Offline", {
-              status: 503,
-              headers: { "Content-Type": "text/plain; charset=utf-8" },
-            }),
-        );
-      }),
-  );
 });
 
 function parsePushPayload(event) {

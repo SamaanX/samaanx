@@ -87,8 +87,12 @@ type DetailListing = {
   wishlists?: { id: string }[];
 };
 
-function toDateOnly(value: Date): string {
-  return value.toISOString().slice(0, 10);
+function coerceDate(value: Date | string): Date {
+  return value instanceof Date ? value : new Date(value);
+}
+
+function toDateOnly(value: Date | string): string {
+  return coerceDate(value).toISOString().slice(0, 10);
 }
 
 function todayUtcDateOnly(): string {
@@ -104,8 +108,8 @@ export function resolveAvailabilityLabel(
   const blockedToday = rows.some(
     (row) =>
       row.type === "BLOCKED" &&
-      row.startDate <= todayDate &&
-      row.endDate >= todayDate,
+      coerceDate(row.startDate) <= todayDate &&
+      coerceDate(row.endDate) >= todayDate,
   );
   if (blockedToday) {
     return "Limited";
@@ -114,15 +118,15 @@ export function resolveAvailabilityLabel(
   const availableToday = rows.some(
     (row) =>
       row.type === "AVAILABLE" &&
-      row.startDate <= todayDate &&
-      row.endDate >= todayDate,
+      coerceDate(row.startDate) <= todayDate &&
+      coerceDate(row.endDate) >= todayDate,
   );
   if (availableToday) {
     return "Available";
   }
 
   const hasFutureAvailable = rows.some(
-    (row) => row.type === "AVAILABLE" && row.endDate >= todayDate,
+    (row) => row.type === "AVAILABLE" && coerceDate(row.endDate) >= todayDate,
   );
   return hasFutureAvailable ? "Limited" : "Check dates";
 }
@@ -194,7 +198,9 @@ export function toPublicListingCardView(
     verificationBadge: listing.seller.verificationBadge,
     isWishlisted: Boolean(listing.wishlists && listing.wishlists.length > 0),
     availabilityLabel: resolveAvailabilityLabel(listing.availability),
-    publishedAt: listing.publishedAt?.toISOString() ?? null,
+    publishedAt: listing.publishedAt
+      ? coerceDate(listing.publishedAt).toISOString()
+      : null,
     distanceKm:
       distanceKm !== null && Number.isFinite(distanceKm)
         ? Math.round(distanceKm * 10) / 10
@@ -225,7 +231,7 @@ export function toSellerCardView(
     avgRating: Number(seller.avgRating),
     ratingCount: seller.ratingCount,
     completedRentalsCount: seller.completedRentalsCount,
-    memberSince: seller.memberSince.toISOString(),
+    memberSince: coerceDate(seller.memberSince).toISOString(),
     verificationBadge: seller.verificationBadge,
     responseTimeMinutesAvg: seller.responseTimeMinutesAvg,
     city: seller.city,
@@ -285,7 +291,9 @@ export function toPublicListingDetailView(
     locationPrecision: publicCoords.precision,
     showExactPickup: listing.showExactPickup,
     viewCount: listing.viewCount,
-    publishedAt: listing.publishedAt?.toISOString() ?? null,
+    publishedAt: listing.publishedAt
+      ? coerceDate(listing.publishedAt).toISOString()
+      : null,
     isWishlisted: Boolean(listing.wishlists && listing.wishlists.length > 0),
     distanceKm,
     images: [...listing.images]
@@ -296,7 +304,10 @@ export function toPublicListingDetailView(
         sortOrder: image.sortOrder,
       })),
     availability: [...listing.availability]
-      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+      .sort(
+        (a, b) =>
+          coerceDate(a.startDate).getTime() - coerceDate(b.startDate).getTime(),
+      )
       .map((row) => ({
         id: row.id,
         type: row.type,
