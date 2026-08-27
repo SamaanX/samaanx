@@ -40,38 +40,60 @@ export const getActiveCategories = unstable_cache(
   { revalidate: CATEGORIES_REVALIDATE_SECONDS, tags: ["categories"] },
 );
 
-export async function getSellerListings(
+export const SELLER_LISTINGS_PAGE_SIZE = 20;
+
+const sellerListingCardSelect = {
+  id: true,
+  title: true,
+  status: true,
+  rentPriceAmount: true,
+  rentPriceUnit: true,
+  currency: true,
+  city: true,
+  area: true,
+  viewCount: true,
+  requestCount: true,
+  createdAt: true,
+  publishedAt: true,
+  category: { select: { name: true } },
+  images: {
+    select: { url: true, sortOrder: true },
+    orderBy: { sortOrder: "asc" as const },
+    take: 1,
+  },
+} as const;
+
+export async function getSellerListingsPage(
   sellerId: string,
-): Promise<SellerListingCardView[]> {
-  const listings = await prisma.listing.findMany({
+  options: { cursor?: string | null; take?: number } = {},
+): Promise<{ listings: SellerListingCardView[]; nextCursor: string | null }> {
+  const take = options.take ?? SELLER_LISTINGS_PAGE_SIZE;
+
+  const rows = await prisma.listing.findMany({
     where: {
       sellerId,
       deletedAt: null,
     },
-    select: {
-      id: true,
-      title: true,
-      status: true,
-      rentPriceAmount: true,
-      rentPriceUnit: true,
-      currency: true,
-      city: true,
-      area: true,
-      viewCount: true,
-      requestCount: true,
-      createdAt: true,
-      publishedAt: true,
-      category: { select: { name: true } },
-      images: {
-        select: { url: true, sortOrder: true },
-        orderBy: { sortOrder: "asc" },
-        take: 1,
-      },
-    },
-    orderBy: { createdAt: "desc" },
+    select: sellerListingCardSelect,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: take + 1,
+    ...(options.cursor ? { cursor: { id: options.cursor }, skip: 1 } : {}),
   });
 
-  return listings.map(toSellerListingCardView);
+  const hasMore = rows.length > take;
+  const page = hasMore ? rows.slice(0, take) : rows;
+
+  return {
+    listings: page.map(toSellerListingCardView),
+    nextCursor: hasMore ? (page[page.length - 1]?.id ?? null) : null,
+  };
+}
+
+export async function getSellerListings(
+  sellerId: string,
+): Promise<SellerListingCardView[]> {
+  const { listings } = await getSellerListingsPage(sellerId);
+  return listings;
 }
 
 export async function getSellerListingDetail(

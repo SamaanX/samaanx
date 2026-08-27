@@ -214,6 +214,48 @@ export async function getReviewEligibilityForRental(
   rentalId: string,
   userId: string,
 ): Promise<ReviewEligibleRental | null> {
-  const list = await getReviewEligibilityForUser(userId);
-  return list.find((r) => r.rentalId === rentalId) ?? null;
+  const rental = await prisma.rental.findFirst({
+    where: {
+      id: rentalId,
+      status: "COMPLETED",
+      OR: [{ buyerId: userId }, { sellerId: userId }],
+    },
+    select: {
+      id: true,
+      buyerId: true,
+      sellerId: true,
+      startDate: true,
+      endDate: true,
+      listing: { select: { title: true, slug: true } },
+      buyer: {
+        select: { id: true, displayName: true, avatarUrl: true },
+      },
+      seller: {
+        select: { id: true, displayName: true, avatarUrl: true },
+      },
+      reviews: {
+        where: { reviewerId: userId },
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+
+  if (!rental) return null;
+
+  const isBuyer = rental.buyerId === userId;
+  const reviewee = isBuyer ? rental.seller : rental.buyer;
+
+  return {
+    rentalId: rental.id,
+    listingTitle: rental.listing.title,
+    listingSlug: rental.listing.slug,
+    revieweeId: reviewee.id,
+    revieweeName: reviewee.displayName,
+    revieweeAvatarUrl: reviewee.avatarUrl,
+    role: isBuyer ? ("buyer" as const) : ("seller" as const),
+    startDate: rental.startDate.toISOString(),
+    endDate: rental.endDate.toISOString(),
+    alreadyReviewed: rental.reviews.length > 0,
+  };
 }

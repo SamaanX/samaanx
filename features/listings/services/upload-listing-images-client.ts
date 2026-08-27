@@ -10,6 +10,7 @@ import {
   extensionForListingMime,
   getListingImagePublicUrl,
 } from "@/features/listings/services/listing-image-storage";
+import { compressListingImageForUpload } from "@/lib/images/compress-listing-image";
 import { createClient } from "@/lib/supabase/client";
 
 const UPLOAD_CONCURRENCY = 5;
@@ -32,7 +33,9 @@ async function uploadOneListingImage(params: {
   sortOrder: number;
   stamp: number;
 }): Promise<ListingImageMeta> {
-  const mime = resolveListingMime(params.file);
+  const sourceMime = resolveListingMime(params.file);
+  const file = await compressListingImageForUpload(params.file, sourceMime);
+  const mime = resolveListingMime(file);
   const ext = extensionForListingMime(mime);
   const objectPath = buildListingImagePath(
     params.userId,
@@ -43,7 +46,7 @@ async function uploadOneListingImage(params: {
   const supabase = createClient();
   const { error } = await supabase.storage
     .from(LISTING_IMAGES_BUCKET)
-    .upload(objectPath, params.file, {
+    .upload(objectPath, file, {
       contentType: mime,
       upsert: false,
       cacheControl: "3600",
@@ -57,7 +60,7 @@ async function uploadOneListingImage(params: {
     storagePath: objectPath,
     url: getListingImagePublicUrl(objectPath),
     sortOrder: params.sortOrder,
-    byteSize: params.file.size,
+    byteSize: file.size,
   };
 }
 

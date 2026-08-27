@@ -263,7 +263,7 @@ export function useChatInbox(initial: ChatConversationListItem[]) {
     },
     initialData: initial,
     staleTime: 5_000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -365,18 +365,6 @@ export function useChatUserRealtime(
             queryClient.setQueryData(queryKeys.chat.unreadTotal(), result.data);
           }
         });
-      },
-    );
-
-    channel.on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "messages" },
-      (payload) => {
-        const row = payload.new as Record<string, unknown>;
-        const message = chatMessageViewFromPostgresRow(row, userId);
-        if (!message || message.senderId === userId) return;
-
-        applyIncomingMessage(queryClient, userId, message, "postgres");
       },
     );
 

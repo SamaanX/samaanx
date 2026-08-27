@@ -182,21 +182,20 @@ export async function getChatThreadAction(conversationId: string): Promise<
 > {
   try {
     const { profile } = await requireUser();
-    const header = await getConversationThreadHeader(
-      conversationId,
-      profile.id,
-    );
+    const [header, page] = await Promise.all([
+      getConversationThreadHeader(conversationId, profile.id),
+      listMessagesPage({
+        conversationId,
+        userId: profile.id,
+        skipAccessCheck: true,
+      }),
+    ]);
     if (!header) {
       return {
         ok: false,
         error: { code: "NOT_FOUND", message: "Conversation not found." },
       };
     }
-    const page = await listMessagesPage({
-      conversationId,
-      userId: profile.id,
-      skipAccessCheck: true,
-    });
     if (!page) {
       return {
         ok: false,

@@ -38,7 +38,6 @@ import {
 import type { VerificationStatusView } from "@/features/verification/types/verification";
 import { trackEvent } from "@/lib/analytics/events";
 import { queryKeys } from "@/lib/query-keys";
-import { useRealtimeRentalSync } from "@/providers/realtime-sync-provider";
 
 type VerificationPanelProps = {
   initial: VerificationStatusView;
@@ -91,7 +90,7 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
     },
     initialData: initial,
     initialDataUpdatedAt: initialUpdatedAtRef.current,
-    staleTime: 0,
+    staleTime: 30_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
@@ -99,24 +98,12 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
 
   const status = statusQuery.data ?? initial;
 
-  const fetchLatestStatus = React.useCallback(async () => {
-    await queryClient.fetchQuery({
+  const refreshStatus = React.useCallback(async () => {
+    await queryClient.invalidateQueries({
       queryKey: queryKeys.verification.status(initial.rentalId, stage),
-      queryFn: async () => {
-        const result = await getVerificationStatusAction({
-          rentalId: initial.rentalId,
-          stage,
-        });
-        if (!result.ok) throw new Error(result.error.message);
-        return result.data;
-      },
-      staleTime: 0,
+      refetchType: "active",
     });
   }, [initial.rentalId, queryClient, stage]);
-
-  const refreshStatus = React.useCallback(async () => {
-    await fetchLatestStatus();
-  }, [fetchLatestStatus]);
 
   React.useEffect(() => {
     function onVerificationSync(event: Event) {
@@ -124,21 +111,13 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
       if (detail.rentalId !== initial.rentalId || detail.stage !== stage)
         return;
       applyLiveVerificationPatch(queryClient, initial.rentalId, stage, detail);
-      void fetchLatestStatus();
     }
 
     window.addEventListener(VERIFICATION_SYNC_EVENT, onVerificationSync);
     return () => {
       window.removeEventListener(VERIFICATION_SYNC_EVENT, onVerificationSync);
     };
-  }, [fetchLatestStatus, initial.rentalId, queryClient, stage]);
-
-  useRealtimeRentalSync(
-    React.useCallback(() => {
-      void refreshStatus();
-    }, [refreshStatus]),
-    initial.rentalId,
-  );
+  }, [initial.rentalId, queryClient, stage]);
 
   async function run<T>(
     action: () => Promise<
@@ -182,7 +161,10 @@ export function VerificationPanel({ initial, stage }: VerificationPanelProps) {
       rentalId: status.rentalId,
       verification: options?.liveSync?.(result.data, status),
     });
-    void fetchLatestStatus();
+
+    if (!options?.patch) {
+      void refreshStatus();
+    }
   }
 
   const stageLabel = stage === "HANDOVER" ? "Handover" : "Return";

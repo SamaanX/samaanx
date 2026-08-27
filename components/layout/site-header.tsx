@@ -213,23 +213,43 @@ export function SiteHeader({
             </div>
           ) : null}
           <ul className="space-y-1">
-            {nav.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  prefetch
-                  onClick={() => setOpen(false)}
-                  className="hover:bg-brand-blue-soft hover:text-brand-blue flex items-center justify-between rounded-xl px-3 py-3 text-sm font-medium"
-                >
-                  <span>{item.label}</span>
-                  {item.href === "/chat" && chatUnreadCount > 0 ? (
-                    <span className="bg-brand-green inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[0.7rem] font-bold text-white">
-                      {chatUnreadCount > 9 ? "9+" : chatUnreadCount}
-                    </span>
-                  ) : null}
-                </Link>
-              </li>
-            ))}
+            {nav
+              .filter((item) => {
+                if (item.href === "/" || item.href === "/search") return false;
+                if (
+                  isAuthenticated &&
+                  mode === "BUYER" &&
+                  (item.href === "/rentals" || item.href === "/wishlist")
+                ) {
+                  return false;
+                }
+                if (
+                  isAuthenticated &&
+                  mode === "SELLER" &&
+                  (item.href === "/seller/listings" ||
+                    item.href === "/seller/rentals")
+                ) {
+                  return false;
+                }
+                return true;
+              })
+              .map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    prefetch
+                    onClick={() => setOpen(false)}
+                    className="hover:bg-brand-blue-soft hover:text-brand-blue flex items-center justify-between rounded-xl px-3 py-3 text-sm font-medium"
+                  >
+                    <span>{item.label}</span>
+                    {item.href === "/chat" && chatUnreadCount > 0 ? (
+                      <span className="bg-brand-green inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[0.7rem] font-bold text-white">
+                        {chatUnreadCount > 9 ? "9+" : chatUnreadCount}
+                      </span>
+                    ) : null}
+                  </Link>
+                </li>
+              ))}
             {isAuthenticated ? (
               <>
                 <li>
@@ -242,7 +262,7 @@ export function SiteHeader({
                     Notifications
                   </Link>
                 </li>
-                <li>
+                <li className="hidden md:list-item">
                   <Link
                     href="/wishlist"
                     prefetch

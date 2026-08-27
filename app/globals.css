@@ -43,7 +43,11 @@
   --brand-teal-bright: var(--brand-green);
   --brand-teal-soft: var(--brand-green-soft);
 
-  /* Typography */
+  /* Layout chrome */
+  --mobile-bottom-nav-height: 4rem;
+  --mobile-fab-offset: calc(
+    var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px) + 0.75rem
+  );
   --rp-text-xs: 0.75rem;
   --rp-text-sm: 0.875rem;
   --rp-text-base: 1rem;
@@ -377,4 +381,11 @@
 .leaflet-top,
 .leaflet-bottom {
   z-index: 2;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --mobile-bottom-nav-height: 0px;
+    --mobile-fab-offset: 1.5rem;
+  }
 }

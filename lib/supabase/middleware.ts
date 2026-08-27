@@ -4,6 +4,10 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { getPublicEnv } from "@/config/env";
 import {
+  MIDDLEWARE_AUTH_VALIDATED_HEADER,
+  MIDDLEWARE_USER_ID_HEADER,
+} from "@/lib/auth/middleware-auth";
+import {
   isAuthCallbackPath,
   isAuthPage,
   isProtectedPath,
@@ -29,6 +33,18 @@ function hasSupabaseAuthCookie(request: NextRequest): boolean {
     );
 }
 
+function forwardRequestHeaders(
+  request: NextRequest,
+  user: User | null,
+): Headers {
+  const requestHeaders = new Headers(request.headers);
+  if (user && !user.is_anonymous) {
+    requestHeaders.set(MIDDLEWARE_AUTH_VALIDATED_HEADER, "1");
+    requestHeaders.set(MIDDLEWARE_USER_ID_HEADER, user.id);
+  }
+  return requestHeaders;
+}
+
 /**
  * Refresh session when needed.
  * Guest marketplace traffic with no auth cookie skips Auth RTT (Pakistan latency win).
@@ -50,8 +66,9 @@ export async function updateSession(
     };
   }
 
+  let requestHeaders = forwardRequestHeaders(request, null);
   let supabaseResponse = NextResponse.next({
-    request,
+    request: { headers: requestHeaders },
   });
 
   const { NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY } =
@@ -70,7 +87,7 @@ export async function updateSession(
             request.cookies.set(name, value);
           });
           supabaseResponse = NextResponse.next({
-            request,
+            request: { headers: requestHeaders },
           });
           cookiesToSet.forEach(({ name, value, options }) => {
             supabaseResponse.cookies.set(name, value, options);
@@ -88,6 +105,11 @@ export async function updateSession(
   } catch {
     return { response: supabaseResponse, user: null };
   }
+
+  requestHeaders = forwardRequestHeaders(request, user);
+  supabaseResponse = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   return { response: supabaseResponse, user };
 }

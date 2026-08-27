@@ -1,17 +1,26 @@
 "use server";
 
-import { getSellerListings } from "@/features/listings/queries/categories";
+import {
+  getSellerListingsPage,
+  SELLER_LISTINGS_PAGE_SIZE,
+} from "@/features/listings/queries/categories";
 import type { SellerListingCardView } from "@/features/listings/types/listing";
 import { requireUser } from "@/lib/auth/guards";
 import { logger } from "@/lib/logger";
 
-export async function getSellerListingsAction(): Promise<
-  | { ok: true; data: SellerListingCardView[] }
+export async function getSellerListingsAction(cursor?: string | null): Promise<
+  | {
+      ok: true;
+      data: {
+        listings: SellerListingCardView[];
+        nextCursor: string | null;
+      };
+    }
   | { ok: false; error: { message: string } }
 > {
   try {
     const { profile } = await requireUser();
-    const data = await getSellerListings(profile.id);
+    const data = await getSellerListingsPage(profile.id, { cursor });
     return { ok: true, data };
   } catch (error) {
     logger.error("getSellerListingsAction failed", {
@@ -23,3 +32,5 @@ export async function getSellerListingsAction(): Promise<
     };
   }
 }
+
+export { SELLER_LISTINGS_PAGE_SIZE };

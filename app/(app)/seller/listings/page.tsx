@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { BackButton } from "@/components/navigation/back-button";
 import { BACK_FALLBACKS } from "@/components/navigation/back-fallbacks";
 import { SellerListingsPanel } from "@/features/listings/components/seller-listings-panel";
-import { getSellerListings } from "@/features/listings/queries/categories";
+import { getSellerListingsPage } from "@/features/listings/queries/categories";
 import { requireUser } from "@/lib/auth/guards";
 import { AppError } from "@/lib/errors/app-error";
 import { withPerf } from "@/lib/perf";
@@ -26,11 +26,16 @@ function ListingsSkeleton() {
 }
 
 async function SellerListingsContent({ profileId }: { profileId: string }) {
-  const listings = await withPerf("route.seller.listings", () =>
-    getSellerListings(profileId),
+  const page = await withPerf("route.seller.listings", () =>
+    getSellerListingsPage(profileId),
   );
 
-  return <SellerListingsPanel initial={listings} />;
+  return (
+    <SellerListingsPanel
+      initial={page.listings}
+      initialNextCursor={page.nextCursor}
+    />
+  );
 }
 
 export default async function SellerListingsPage() {

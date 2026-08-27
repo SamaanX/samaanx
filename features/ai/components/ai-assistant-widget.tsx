@@ -1,10 +1,18 @@
 "use client";
 
 import { Sparkles, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import * as React from "react";
 
-import { AiAssistantPanel } from "@/features/ai/components/ai-assistant-panel";
 import { cn } from "@/lib/utils";
+
+const AiAssistantPanel = dynamic(
+  () =>
+    import("@/features/ai/components/ai-assistant-panel").then(
+      (m) => m.AiAssistantPanel,
+    ),
+  { ssr: false },
+);
 
 export function AiAssistantWidget() {
   const [open, setOpen] = React.useState(false);
@@ -24,7 +32,12 @@ export function AiAssistantWidget() {
   }, [open]);
 
   return (
-    <div className="pointer-events-none fixed right-5 bottom-5 z-50 sm:right-6 sm:bottom-6">
+    <div
+      className="pointer-events-none fixed right-4 z-[46] md:right-6 md:bottom-6"
+      style={{
+        bottom: "max(1.25rem, var(--mobile-fab-offset, 1.25rem))",
+      }}
+    >
       {open ? (
         <div
           id={panelId}
@@ -34,8 +47,7 @@ export function AiAssistantWidget() {
           className={cn(
             "border-border/70 bg-card pointer-events-auto mb-3 flex flex-col overflow-hidden rounded-2xl border shadow-[var(--rp-shadow-md)]",
             "motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-3 motion-safe:duration-200",
-            "h-[min(560px,calc(100dvh-6.5rem))] w-[min(380px,calc(100vw-2.5rem))]",
-            "max-sm:right-0 max-sm:left-auto max-sm:w-[calc(100vw-2.5rem)]",
+            "h-[min(560px,calc(100dvh-var(--mobile-fab-offset)-5rem))] w-[min(380px,calc(100vw-2rem))]",
           )}
         >
           <AiAssistantPanel onClose={() => setOpen(false)} />

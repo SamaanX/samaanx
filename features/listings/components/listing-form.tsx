@@ -16,7 +16,6 @@ import {
   rollbackListingDraftAction,
   updateListingAction,
 } from "@/features/listings/actions";
-import { getSellerListingsAction } from "@/features/listings/actions/get-seller-listings";
 import {
   FieldError,
   FormMessage,
@@ -42,7 +41,6 @@ import type {
 import { LazyLocationPicker } from "@/features/maps/components/lazy-location-picker";
 import { afterLiveMutation } from "@/features/realtime/live-sync";
 import { trackEvent } from "@/lib/analytics/events";
-import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 
 const SELLER_LISTINGS_HREF = "/seller/listings";
@@ -209,17 +207,7 @@ export function ListingForm({
 
   async function goToMyListings() {
     afterLiveMutation(queryClient, [], { surfaces: ["sellerListings"] });
-    await queryClient.fetchQuery({
-      queryKey: queryKeys.sellerListings.list(),
-      queryFn: async () => {
-        const result = await getSellerListingsAction();
-        if (!result.ok) throw new Error(result.error.message);
-        return result.data;
-      },
-      staleTime: 0,
-    });
     router.replace(SELLER_LISTINGS_HREF);
-    router.refresh();
   }
 
   async function onSubmit(values: ListingFormValues) {

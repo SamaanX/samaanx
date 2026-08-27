@@ -1,6 +1,11 @@
 import type { Session, User } from "@supabase/supabase-js";
+import { headers } from "next/headers";
 import { cache } from "react";
 
+import {
+  getMiddlewareUserId,
+  isMiddlewareAuthValidated,
+} from "@/lib/auth/middleware-auth";
 import { withPerf } from "@/lib/perf";
 import { recordAuthCall } from "@/lib/perf/request-metrics";
 import { createClient } from "@/lib/supabase/server";
@@ -32,10 +37,28 @@ export const getSession = cache(async (): Promise<Session | null> => {
 
 /**
  * Deduped per request via React cache().
- * Middleware still calls getUser separately (Edge) — this covers the RSC tree.
+ * When middleware already validated getUser(), reuse session JWT (no 2nd Supabase RTT).
  */
 export const getCurrentUser = cache(async (): Promise<User | null> => {
   return withPerf("auth.getUser", async () => {
+    try {
+      const headerStore = await headers();
+      if (isMiddlewareAuthValidated(headerStore)) {
+        const middlewareUserId = getMiddlewareUserId(headerStore);
+        const session = await getSession();
+        const sessionUser = session?.user ?? null;
+        if (
+          sessionUser &&
+          !sessionUser.is_anonymous &&
+          middlewareUserId === sessionUser.id
+        ) {
+          return sessionUser;
+        }
+      }
+    } catch {
+      // headers() unavailable outside request — fall through to getUser().
+    }
+
     recordAuthCall("getUser");
     const supabase = await getSupabaseServerClient();
     const { data, error } = await supabase.auth.getUser();

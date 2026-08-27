@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 import { PreferredModeHydrator } from "@/components/layout/preferred-mode-hydrator";
 import {
   RealtimeUserBridge,
@@ -44,14 +45,17 @@ export default async function AppLayout({
           <div className="relative z-10 flex min-h-dvh flex-col">
             <Suspense
               fallback={
-                <SiteHeader
-                  isAuthenticated={false}
-                  preferredMode="BUYER"
-                  modeProfile={null}
-                  avatarUrl={null}
-                  displayName={null}
-                  notificationSlot={null}
-                />
+                <>
+                  <SiteHeader
+                    isAuthenticated={false}
+                    preferredMode="BUYER"
+                    modeProfile={null}
+                    avatarUrl={null}
+                    displayName={null}
+                    notificationSlot={null}
+                  />
+                  <MobileBottomNav isAuthenticated={false} mode="BUYER" />
+                </>
               }
             >
               <AppAuthHeader />
@@ -61,7 +65,11 @@ export default async function AppLayout({
               <AppActivityBanner />
             </Suspense>
 
-            <main id="main-content" className="flex-1" tabIndex={-1}>
+            <main
+              id="main-content"
+              className="flex-1 pb-[calc(var(--mobile-bottom-nav-height)+env(safe-area-inset-bottom))] md:pb-0"
+              tabIndex={-1}
+            >
               {children}
             </main>
             <AiAssistantWidget />
@@ -102,6 +110,10 @@ async function AppAuthHeader() {
         notificationSlot={
           profile ? <HeaderNotifications userId={profile.id} /> : null
         }
+      />
+      <MobileBottomNav
+        isAuthenticated={Boolean(profileView)}
+        mode={preferredMode}
       />
     </>
   );

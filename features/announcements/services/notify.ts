@@ -2,14 +2,16 @@ import "server-only";
 
 import { after } from "next/server";
 
-import { resolveAnnouncementRecipientIds } from "@/features/announcements/services/recipients";
+import {
+  ANNOUNCEMENT_RECIPIENT_CHUNK_SIZE,
+  countAnnouncementRecipients,
+  fetchAnnouncementRecipientChunk,
+} from "@/features/announcements/services/recipients";
 import { prisma } from "@/lib/db/prisma";
 import { logger } from "@/lib/logger";
 import { sendPushBatchToUsers } from "@/lib/push/batch-send";
 import { sanitizePushUrl } from "@/lib/push/validate-url";
 import { scheduleLiveSyncAfterResponse } from "@/lib/realtime/schedule-live-sync";
-
-const NOTIFY_CHUNK_SIZE = 250;
 
 export type AnnouncementNotifyInput = {
   announcementId: string;
@@ -36,20 +38,21 @@ function pushBodyPreview(body: string): string {
 export async function fanOutAnnouncementNotifications(
   input: AnnouncementNotifyInput,
 ): Promise<AnnouncementDeliveryStats> {
-  const userIds = await resolveAnnouncementRecipientIds(
-    input.target,
-    input.targetUserId,
-  );
-
   const stats: AnnouncementDeliveryStats = {
-    recipientCount: userIds.length,
+    recipientCount: 0,
     pushAttempted: 0,
     pushSuccess: 0,
     pushFailed: 0,
     expiredRemoved: 0,
   };
 
-  if (userIds.length === 0) {
+  const totalRecipients = await countAnnouncementRecipients(
+    input.target,
+    input.targetUserId,
+  );
+  stats.recipientCount = totalRecipients;
+
+  if (totalRecipients === 0) {
     return stats;
   }
 
@@ -61,10 +64,20 @@ export async function fanOutAnnouncementNotifications(
     targetUrl: safeTargetUrl,
   };
 
-  for (let index = 0; index < userIds.length; index += NOTIFY_CHUNK_SIZE) {
-    const chunk = userIds.slice(index, index + NOTIFY_CHUNK_SIZE);
+  let cursor: string | null = null;
+
+  for (;;) {
+    const chunk = await fetchAnnouncementRecipientChunk({
+      target: input.target,
+      targetUserId: input.targetUserId,
+      take: ANNOUNCEMENT_RECIPIENT_CHUNK_SIZE,
+      cursor,
+    });
+
+    if (chunk.ids.length === 0) break;
+
     await prisma.notification.createMany({
-      data: chunk.map((userId) => ({
+      data: chunk.ids.map((userId) => ({
         userId,
         type: "SYSTEM",
         channel: "IN_APP",
@@ -76,25 +89,29 @@ export async function fanOutAnnouncementNotifications(
         sentAt: now,
       })),
     });
-    scheduleLiveSyncAfterResponse(chunk);
+
+    scheduleLiveSyncAfterResponse(chunk.ids);
+
+    const pushStats = await sendPushBatchToUsers({
+      userIds: chunk.ids,
+      title: input.title,
+      body: pushBodyPreview(input.body),
+      url: safeTargetUrl,
+      type: "SYSTEM",
+      notificationId: input.announcementId,
+      dedupeKeyForUser: (userId) =>
+        `push:announcement:${input.announcementId}:${userId}`,
+      tagForUser: () => `announcement:${input.announcementId}`,
+    });
+
+    stats.pushAttempted += pushStats.pushAttempted;
+    stats.pushSuccess += pushStats.pushSuccess;
+    stats.pushFailed += pushStats.pushFailed;
+    stats.expiredRemoved += pushStats.expiredRemoved;
+
+    cursor = chunk.nextCursor;
+    if (!cursor) break;
   }
-
-  const pushStats = await sendPushBatchToUsers({
-    userIds,
-    title: input.title,
-    body: pushBodyPreview(input.body),
-    url: safeTargetUrl,
-    type: "SYSTEM",
-    notificationId: input.announcementId,
-    dedupeKeyForUser: (userId) =>
-      `push:announcement:${input.announcementId}:${userId}`,
-    tagForUser: () => `announcement:${input.announcementId}`,
-  });
-
-  stats.pushAttempted = pushStats.pushAttempted;
-  stats.pushSuccess = pushStats.pushSuccess;
-  stats.pushFailed = pushStats.pushFailed;
-  stats.expiredRemoved = pushStats.expiredRemoved;
 
   await prisma.announcement.update({
     where: { id: input.announcementId },
